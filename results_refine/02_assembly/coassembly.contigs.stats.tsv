@@ -1,0 +1,3 @@
+assembly	contig_set	n_contigs	total_length	n50	max_length
+coassembly	all	1582	2370643	7415	94357
+coassembly	>=500bp	640	2013924	9998	94357

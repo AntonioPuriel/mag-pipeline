@@ -14,6 +14,9 @@ include { MAPPING_SUMMARY } from './modules/mapping_summary'
 include { METABAT2        } from './modules/metabat2'
 include { CONCOCT         } from './modules/concoct'
 include { BIN_SUMMARY     } from './modules/bin_summary'
+include { DAS_TOOL        } from './modules/dastool'
+include { CHECKM2         } from './modules/checkm2'
+include { MAG_QUALITY     } from './modules/mag_quality'
 
 workflow {
 
@@ -29,6 +32,12 @@ workflow {
     def unknown_binners = binners - ['concoct', 'metabat2']
     if (!binners || unknown_binners) {
         error "--binners must be a comma-separated list of: concoct, metabat2 (got '${params.binners}')"
+    }
+    if (params.refine && binners.size() < 2) {
+        log.warn "--refine with a single binner: DAS_Tool will only filter bins, not combine binners"
+    }
+    if (!params.skip_checkm2 && !params.checkm2_db && !workflow.stubRun) {
+        error "Please provide the CheckM2 database with --checkm2_db, or skip MAG quality assessment with --skip_checkm2"
     }
 
     // ---- Read samplesheet: sample,fastq_1,fastq_2 ----
@@ -95,5 +104,31 @@ workflow {
         bins_ch = bins_ch.mix(CONCOCT.out.bins)
     }
 
-    BIN_SUMMARY(bins_ch.map { id, binner, dir -> dir }.collect())
+    // ---- Bin refinement (optional) ----
+    if (params.refine) {
+        dastool_input = FILTER_CONTIGS.out.contigs
+            .join(bins_ch.map { id, binner, dir -> tuple(id, dir) }.groupTuple())
+
+        DAS_TOOL(dastool_input)
+        final_bins = DAS_TOOL.out.bins
+        all_bins   = bins_ch.mix(DAS_TOOL.out.bins)
+    } else {
+        final_bins = bins_ch
+        all_bins   = bins_ch
+    }
+
+    BIN_SUMMARY(all_bins.map { id, binner, dir -> dir }.collect())
+
+    // ---- MAG quality ----
+    if (!params.skip_checkm2) {
+        checkm2_db = params.checkm2_db
+            ? file(params.checkm2_db, checkIfExists: !workflow.stubRun)
+            : file("${projectDir}/assets/NO_FILE")
+
+        CHECKM2(final_bins, checkm2_db)
+        MAG_QUALITY(
+            BIN_SUMMARY.out.tsv,
+            CHECKM2.out.report.map { id, binner, report -> report }.collect()
+        )
+    }
 }

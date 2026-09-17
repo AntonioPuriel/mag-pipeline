@@ -2,7 +2,7 @@
 
 Nextflow DSL2 pipeline for recovering metagenome-assembled genomes (MAGs) from paired-end shotgun metagenomes.
 
-> 🚧 Work in progress — QC, assembly, read mapping and binning are implemented; bin refinement and MAG quality assessment are next.
+From raw paired-end reads to quality-assessed MAGs. Every step has been tested on an HPC cluster (SLURM) with conda environments and in CI with stub runs.
 
 ## Workflow
 
@@ -13,8 +13,8 @@ Nextflow DSL2 pipeline for recovering metagenome-assembled genomes (MAGs) from p
 | Contig length filtering and assembly stats | custom awk script | ✅ |
 | Read mapping and contig coverage | Bowtie2, samtools, jgi_summarize_bam_contig_depths | ✅ |
 | Binning and bin statistics | CONCOCT, MetaBAT2 | ✅ |
-| Bin refinement | DAS_Tool | 🔜 |
-| MAG quality | CheckM2 | 🔜 |
+| Bin refinement (optional) | DAS_Tool | ✅ |
+| MAG quality and final MAG table | CheckM2 | ✅ |
 
 ## Quick start
 
@@ -25,6 +25,8 @@ nextflow run . -profile test,singularity
 # Your own data on a SLURM cluster
 nextflow run . -profile singularity,slurm \
     --input samplesheet.csv \
+    --checkm2_db /path/to/CheckM2_database/uniref100.KO.1.dmnd \
+    --refine \
     --outdir results
 ```
 
@@ -57,6 +59,10 @@ sampleB,/path/sampleB_R1.fastq.gz,/path/sampleB_R2.fastq.gz
 | `--min_read_length` | `50` | Minimum read length after trimming |
 | `--min_contig_length` | `1500` | Minimum contig length kept for mapping and binning |
 | `--binners` | `concoct,metabat2` | Binners to run: `concoct`, `metabat2` or both |
+| `--refine` | `false` | Combine and refine bins with DAS_Tool |
+| `--dastool_score_threshold` | `0.5` | Minimum DAS_Tool score for a bin to be kept |
+| `--checkm2_db` | – | CheckM2 DIAMOND database (`uniref100.KO.1.dmnd`) |
+| `--skip_checkm2` | `false` | Skip MAG quality assessment |
 
 ## Output
 
@@ -67,10 +73,27 @@ results/
 │   └── raw/        # unfiltered MEGAHIT contigs and logs
 ├── 03_mapping/     # contig depth table, mapping summary (alignment rate per sample)
 │   └── logs/       # Bowtie2 logs
-└── 04_binning/     # bin_summary.tsv (contigs, size, N50, GC per bin)
-    ├── concoct/    # one FASTA per bin
-    └── metabat2/   # one FASTA per bin
+├── 04_binning/     # bin_summary.tsv (contigs, size, N50, GC per bin)
+│   ├── concoct/    # one FASTA per bin
+│   ├── metabat2/   # one FASTA per bin
+│   └── dastool/    # refined bins (with --refine)
+└── 05_quality/     # mag_quality.tsv: final table with completeness, contamination and quality
+    └── checkm2/    # CheckM2 reports
 ```
+
+## MAG quality categories
+
+`mag_quality.tsv` classifies each bin from CheckM2 completeness and contamination, following the MIMAG thresholds:
+
+| Category | Completeness | Contamination |
+|----------|--------------|---------------|
+| high | ≥ 90 % | < 5 % |
+| medium | ≥ 50 % | < 10 % |
+| low | anything below medium | |
+
+rRNA and tRNA presence, also part of the MIMAG high-quality standard, is not assessed.
+
+When `--refine` is used, CheckM2 evaluates the DAS_Tool bins; otherwise it evaluates the bins of each binner.
 
 ## License
 

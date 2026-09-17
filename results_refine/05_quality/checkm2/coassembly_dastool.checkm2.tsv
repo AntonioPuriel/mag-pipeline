@@ -1,0 +1,3 @@
+Name	Completeness	Contamination	Completeness_Model_Used	Translation_Table_Used	Coding_Density	Contig_N50	Average_Gene_Length	Genome_Size	GC_Content	Total_Coding_Sequences	Additional_Notes
+coassembly.concoct.8	8.72	0.0	Neural Network (Specific Model)	11	0.855	663	133.22692307692307	242318	0.4	520	None
+coassembly.metabat2.1	18.32	0.45	Neural Network (Specific Model)	11	0.883	7606	283.03246753246754	739095	0.52	770	None

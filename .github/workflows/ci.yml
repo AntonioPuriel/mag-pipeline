@@ -15,5 +15,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: nf-core/setup-nextflow@v2
-      - name: Run pipeline in stub mode
+      - name: Stub run (default settings)
         run: nextflow run . -profile test -stub-run
+      - name: Stub run (per-sample assembly with DAS_Tool refinement)
+        run: nextflow run . -profile test -stub-run --assembly_mode per_sample --refine --outdir results_refine
