@@ -1,0 +1,8 @@
+work/
+results/
+.nextflow*
+*.fastq
+*.fastq.gz
+*.fq.gz
+*.bam
+*.sif
