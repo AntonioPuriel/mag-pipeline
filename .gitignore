@@ -6,3 +6,5 @@ results/
 *.fq.gz
 *.bam
 *.sif
+slurm-*.out
+slurm-*.error
