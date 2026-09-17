@@ -19,6 +19,7 @@ process MEGAHIT {
         -1 ${r1_list} \\
         -2 ${r2_list} \\
         --num-cpu-threads ${task.cpus} \\
+        --memory ${task.memory.toBytes()} \\
         --out-dir megahit_out \\
         --out-prefix ${id}
 
