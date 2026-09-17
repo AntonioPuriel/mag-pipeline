@@ -11,6 +11,9 @@ include { BOWTIE2_BUILD   } from './modules/bowtie2_build'
 include { BOWTIE2_ALIGN   } from './modules/bowtie2_align'
 include { CONTIG_DEPTHS   } from './modules/contig_depths'
 include { MAPPING_SUMMARY } from './modules/mapping_summary'
+include { METABAT2        } from './modules/metabat2'
+include { CONCOCT         } from './modules/concoct'
+include { BIN_SUMMARY     } from './modules/bin_summary'
 
 workflow {
 
@@ -20,6 +23,12 @@ workflow {
     }
     if (!(params.assembly_mode in ['coassembly', 'per_sample'])) {
         error "--assembly_mode must be 'coassembly' or 'per_sample' (got '${params.assembly_mode}')"
+    }
+
+    def binners = params.binners.toString().tokenize(',').collect { it.trim() }
+    def unknown_binners = binners - ['concoct', 'metabat2']
+    if (!binners || unknown_binners) {
+        error "--binners must be a comma-separated list of: concoct, metabat2 (got '${params.binners}')"
     }
 
     // ---- Read samplesheet: sample,fastq_1,fastq_2 ----
@@ -72,4 +81,19 @@ workflow {
         .groupTuple()
 
     CONTIG_DEPTHS(bams_per_assembly)
+
+    // ---- Binning ----
+    bins_ch = channel.empty()
+
+    if ('metabat2' in binners) {
+        METABAT2(FILTER_CONTIGS.out.contigs.join(CONTIG_DEPTHS.out.depth))
+        bins_ch = bins_ch.mix(METABAT2.out.bins)
+    }
+
+    if ('concoct' in binners) {
+        CONCOCT(FILTER_CONTIGS.out.contigs.join(bams_per_assembly))
+        bins_ch = bins_ch.mix(CONCOCT.out.bins)
+    }
+
+    BIN_SUMMARY(bins_ch.map { id, binner, dir -> dir }.collect())
 }
