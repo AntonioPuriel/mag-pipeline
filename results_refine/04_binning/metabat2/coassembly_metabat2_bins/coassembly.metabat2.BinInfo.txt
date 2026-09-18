@@ -1,3 +1,0 @@
-BinNum	NumContigs	TotalLength	LengthWeightedAvgCoveage	FileName
-1	126	739095	6.16497	coassembly_metabat2_bins/coassembly.metabat2.1.fa
-2	46	812511	8.27013	coassembly_metabat2_bins/coassembly.metabat2.2.fa

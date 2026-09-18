@@ -1,3 +1,0 @@
-assembly	binner	bin	n_contigs	total_length	n50	gc_pct	completeness	contamination	quality
-coassembly	dastool	coassembly.metabat2.1	126	739095	7606	51.77	18.32	0.45	low
-coassembly	dastool	coassembly.concoct.8	353	242318	663	40.01	8.72	0.0	low
