@@ -8,3 +8,6 @@ results*/
 *.sif
 slurm-*.out
 slurm-*.error
+fix_*.sh
+add_*.sh
+update_*.sh
