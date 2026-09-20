@@ -14,7 +14,9 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Read mapping and contig coverage | Bowtie2, samtools, jgi_summarize_bam_contig_depths | ✅ |
 | Binning and bin statistics | CONCOCT, MetaBAT2 | ✅ |
 | Bin refinement (optional) | DAS_Tool | ✅ |
-| MAG quality and final MAG table | CheckM2 | ✅ |
+| MAG quality | CheckM2 | ✅ |
+| Taxonomic classification (optional) | GTDB-Tk | ✅ |
+| Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
 ## Quick start
 
@@ -63,6 +65,12 @@ sampleB,/path/sampleB_R1.fastq.gz,/path/sampleB_R2.fastq.gz
 | `--dastool_score_threshold` | `0.5` | Minimum DAS_Tool score for a bin to be kept |
 | `--checkm2_db` | – | CheckM2 DIAMOND database (`uniref100.KO.1.dmnd`) |
 | `--skip_checkm2` | `false` | Skip MAG quality assessment |
+| `--gtdbtk_db` | – | GTDB-Tk reference data directory (enables taxonomy) |
+| `--gtdbtk_pplacer_cpus` | `1` | Threads for pplacer; more threads multiply memory use |
+| `--gtdbtk_args` | – | Extra flags for `gtdbtk classify_wf` |
+| `--eggnog_db` | – | eggNOG-mapper data directory (enables functional annotation) |
+| `--eggnog_dbmem` | `false` | Load the eggNOG database in RAM (~45 GB, much faster) |
+| `--eggnog_args` | – | Extra flags for `emapper.py` |
 
 ## Output
 
@@ -77,8 +85,12 @@ results/
 │   ├── concoct/    # one FASTA per bin
 │   ├── metabat2/   # one FASTA per bin
 │   └── dastool/    # refined bins (with --refine)
-└── 05_quality/     # mag_quality.tsv: final table with completeness, contamination and quality
-    └── checkm2/    # CheckM2 reports
+├── 05_quality/     # mag_quality.tsv: final table with quality and taxonomy per MAG
+│   └── checkm2/    # CheckM2 reports
+├── 06_taxonomy/    # GTDB-Tk classification (with --gtdbtk_db)
+├── 07_function/    # ko_per_mag.tsv, annotation_stats.tsv (with --eggnog_db)
+│   └── genes/      # protein sequences and gene counts per MAG
+└── run_info.txt    # pipeline version, command line, parameters and database dates
 ```
 
 ## MAG quality categories
@@ -93,7 +105,29 @@ results/
 
 rRNA and tRNA presence, also part of the MIMAG high-quality standard, is not assessed.
 
-When `--refine` is used, CheckM2 evaluates the DAS_Tool bins; otherwise it evaluates the bins of each binner.
+When `--refine` is used, CheckM2 and GTDB-Tk evaluate the DAS_Tool bins; otherwise they evaluate the bins of each binner.
+
+## Functional annotation
+
+With `--eggnog_db`, genes are called on the final bins with Prodigal (`-p single`,
+since bins are genomes rather than raw metagenomic contigs) and annotated with
+eggNOG-mapper. Protein names carry their bin (`<bin>|<gene>`), so the pipeline
+can write two tidy tables: `ko_per_mag.tsv`, with the number of genes per MAG and
+KEGG orthologue, and `annotation_stats.tsv`, with genes, annotated genes and
+distinct KOs per MAG. eggNOG-mapper only reports the genes it could annotate, so
+the total gene count comes from Prodigal: the annotated fraction is a real
+number, not 100% by construction.
+
+## Traceability
+
+Every run writes `run_info.txt` next to the results: pipeline and Nextflow
+versions, the exact command line, every parameter and the modification date of
+each reference database. eggNOG and GTDB releases are not versioned by name, so
+that date is what makes an annotation reproducible months later.
+
+## Taxonomy
+
+Taxonomic classification is optional because the GTDB-Tk reference data is ~100 GB and `pplacer` needs more than 100 GB of RAM. Pass `--gtdbtk_db /path/to/gtdb/release` to enable it; the `process_high_memory` label lets you send only this step to a large-memory partition. The resulting ranks are added to `mag_quality.tsv`, which reports `NA` when taxonomy is not run.
 
 ## License
 

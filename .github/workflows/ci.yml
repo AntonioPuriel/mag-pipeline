@@ -19,3 +19,5 @@ jobs:
         run: nextflow run . -profile test -stub-run
       - name: Stub run (per-sample assembly with DAS_Tool refinement)
         run: nextflow run . -profile test -stub-run --assembly_mode per_sample --refine --outdir results_refine
+      - name: Stub run (with taxonomy and functional annotation)
+        run: nextflow run . -profile test -stub-run --refine --gtdbtk_db assets/NO_FILE --eggnog_db assets/NO_FILE --outdir results_taxonomy

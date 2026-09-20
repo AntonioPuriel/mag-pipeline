@@ -4,14 +4,14 @@ process MAG_QUALITY {
 
     input:
     path bin_summary
-    path checkm2_reports
+    path reports
 
     output:
     path "mag_quality.tsv", emit: tsv
 
     script:
     """
-    mag_quality.sh ${bin_summary} ${checkm2_reports} > mag_quality.tsv
+    mag_quality.sh ${bin_summary} ${reports} > mag_quality.tsv
     """
 
     stub:

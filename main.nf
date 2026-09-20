@@ -17,6 +17,10 @@ include { BIN_SUMMARY     } from './modules/bin_summary'
 include { DAS_TOOL        } from './modules/dastool'
 include { CHECKM2         } from './modules/checkm2'
 include { MAG_QUALITY     } from './modules/mag_quality'
+include { GTDB_TK         } from './modules/gtdbtk'
+include { PRODIGAL           } from './modules/prodigal'
+include { EGGNOG_MAPPER      } from './modules/eggnog_mapper'
+include { FUNCTIONAL_SUMMARY } from './modules/functional_summary'
 
 workflow {
 
@@ -126,9 +130,30 @@ workflow {
             : file("${projectDir}/assets/NO_FILE")
 
         CHECKM2(final_bins, checkm2_db)
-        MAG_QUALITY(
-            BIN_SUMMARY.out.tsv,
-            CHECKM2.out.report.map { id, binner, report -> report }.collect()
+        reports = CHECKM2.out.report.map { id, binner, report -> report }
+
+        // ---- Taxonomy (optional, needs the GTDB-Tk reference data) ----
+        if (params.gtdbtk_db) {
+            gtdbtk_db = file(params.gtdbtk_db, checkIfExists: !workflow.stubRun)
+            GTDB_TK(final_bins, gtdbtk_db)
+            reports = reports.mix(GTDB_TK.out.summary.map { id, binner, summary -> summary })
+        }
+
+        MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.collect())
+    }
+
+    // ---- Functional annotation (optional, needs the eggNOG database) ----
+    if (params.eggnog_db) {
+        eggnog_db = file(params.eggnog_db, checkIfExists: !workflow.stubRun)
+
+        PRODIGAL(final_bins)
+        EGGNOG_MAPPER(PRODIGAL.out.proteins, eggnog_db)
+        FUNCTIONAL_SUMMARY(
+            EGGNOG_MAPPER.out.annotations.map { id, binner, ann -> ann }.collect(),
+            PRODIGAL.out.counts.collect()
         )
+    }
+    else if (params.gtdbtk_db) {
+        log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"
     }
 }
