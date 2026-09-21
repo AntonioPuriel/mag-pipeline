@@ -9,7 +9,7 @@ process BOWTIE2_ALIGN {
 
     output:
     tuple val(id), val(sample), path("${sample}.sorted.bam"), path("${sample}.sorted.bam.bai"), emit: bam
-    path "${sample}.bowtie2.log",                                                             emit: log
+    path "${id}__${sample}.bowtie2.log",                                                             emit: log
 
     script:
     """
@@ -20,7 +20,7 @@ process BOWTIE2_ALIGN {
         -1 ${r1} \\
         -2 ${r2} \\
         --threads ${task.cpus} \\
-        2> ${sample}.bowtie2.log \\
+        2> ${id}__${sample}.bowtie2.log \\
     | samtools sort \\
         -@ ${task.cpus} \\
         -o ${sample}.sorted.bam \\
@@ -31,6 +31,6 @@ process BOWTIE2_ALIGN {
 
     stub:
     """
-    touch ${sample}.sorted.bam ${sample}.sorted.bam.bai ${sample}.bowtie2.log
+    touch ${sample}.sorted.bam ${sample}.sorted.bam.bai ${id}__${sample}.bowtie2.log
     """
 }

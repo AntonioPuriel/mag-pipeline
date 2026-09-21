@@ -21,3 +21,5 @@ jobs:
         run: nextflow run . -profile test -stub-run --assembly_mode per_sample --refine --outdir results_refine
       - name: Stub run (with taxonomy and functional annotation)
         run: nextflow run . -profile test -stub-run --refine --gtdbtk_db assets/NO_FILE --eggnog_db assets/NO_FILE --outdir results_taxonomy
+      - name: Stub run (co-assembly by group, every sample mapped against every assembly)
+        run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --outdir results_groups

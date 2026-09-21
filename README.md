@@ -43,7 +43,8 @@ nextflow run . -profile singularity,slurm \
 
 ## Input
 
-A CSV samplesheet with three columns:
+A CSV samplesheet with three columns, plus an optional `group` column used by
+`--assembly_mode group`:
 
 ```csv
 sample,fastq_1,fastq_2
@@ -51,13 +52,21 @@ sampleA,/path/sampleA_R1.fastq.gz,/path/sampleA_R2.fastq.gz
 sampleB,/path/sampleB_R1.fastq.gz,/path/sampleB_R2.fastq.gz
 ```
 
+## Choosing an assembly strategy
+
+Pooling all samples, pooling them by group, or assembling each sample alone
+changes which genomes are recovered and whether they are redundant across
+assemblies. [docs/assembly_strategies.md](docs/assembly_strategies.md) explains
+the trade-offs and when to dereplicate. Read it before a large run.
+
 ## Main parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--input` | – | Samplesheet (CSV) |
 | `--outdir` | `results` | Output directory |
-| `--assembly_mode` | `coassembly` | `coassembly` or `per_sample` |
+| `--assembly_mode` | `coassembly` | `coassembly`, `group` or `per_sample`; see [assembly strategies](docs/assembly_strategies.md) |
+| `--map_all_samples` | `false` | Map every sample against every assembly |
 | `--min_read_length` | `50` | Minimum read length after trimming |
 | `--min_contig_length` | `1500` | Minimum contig length kept for mapping and binning |
 | `--binners` | `concoct,metabat2` | Binners to run: `concoct`, `metabat2` or both |
@@ -81,7 +90,7 @@ results/
 │   └── raw/        # unfiltered MEGAHIT contigs and logs
 ├── 03_mapping/     # contig depth table, mapping summary (alignment rate per sample)
 │   └── logs/       # Bowtie2 logs
-├── 04_binning/     # bin_summary.tsv (contigs, size, N50, GC per bin)
+├── 04_binning/     # bin_summary.tsv, contig2bin.tsv, mag_abundance.tsv
 │   ├── concoct/    # one FASTA per bin
 │   ├── metabat2/   # one FASTA per bin
 │   └── dastool/    # refined bins (with --refine)

@@ -21,6 +21,7 @@ include { GTDB_TK         } from './modules/gtdbtk'
 include { PRODIGAL           } from './modules/prodigal'
 include { EGGNOG_MAPPER      } from './modules/eggnog_mapper'
 include { FUNCTIONAL_SUMMARY } from './modules/functional_summary'
+include { MAG_ABUNDANCE      } from './modules/mag_abundance'
 
 workflow {
 
@@ -28,8 +29,17 @@ workflow {
     if (!params.input) {
         error "Please provide a samplesheet with --input"
     }
-    if (!(params.assembly_mode in ['coassembly', 'per_sample'])) {
-        error "--assembly_mode must be 'coassembly' or 'per_sample' (got '${params.assembly_mode}')"
+    if (!(params.assembly_mode in ['coassembly', 'group', 'per_sample'])) {
+        error "--assembly_mode must be 'coassembly', 'group' or 'per_sample' (got '${params.assembly_mode}'). See docs/assembly_strategies.md"
+    }
+
+    if (params.assembly_mode in ['group', 'per_sample']) {
+        log.warn "--assembly_mode ${params.assembly_mode} builds more than one assembly: the same genome can be " +
+                 "recovered once per assembly, so MAGs may be redundant across assemblies. " +
+                 "Dereplicate them before counting genomes (see docs/assembly_strategies.md)."
+    }
+    if (params.map_all_samples && params.assembly_mode == 'coassembly') {
+        log.info "--map_all_samples has no effect with --assembly_mode coassembly: every sample is already mapped"
     }
 
     def binners = params.binners.toString().tokenize(',').collect { it.trim() }
@@ -44,27 +54,44 @@ workflow {
         error "Please provide the CheckM2 database with --checkm2_db, or skip MAG quality assessment with --skip_checkm2"
     }
 
-    // ---- Read samplesheet: sample,fastq_1,fastq_2 ----
-    reads_ch = channel
+    // ---- Read samplesheet: sample,fastq_1,fastq_2[,group] ----
+    samplesheet = channel
         .fromPath(params.input, checkIfExists: true)
         .splitCsv(header: true)
         .map { row ->
-            tuple(row.sample, file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true))
+            if (params.assembly_mode == 'group' && !row.group) {
+                error "--assembly_mode group needs a 'group' column in the samplesheet (sample '${row.sample}' has none)"
+            }
+            tuple(row.sample, file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true), row.group ?: 'all')
         }
+
+    reads_ch      = samplesheet.map { sample, r1, r2, group -> tuple(sample, r1, r2) }
+    sample_groups = samplesheet.map { sample, r1, r2, group -> tuple(sample, group) }
 
     // ---- Quality control ----
     FASTP(reads_ch)
 
-    // ---- Assembly input ----
+    // Trimmed reads with the group of each sample: sample, r1, r2, group
+    trimmed = FASTP.out.reads.join(sample_groups)
+
+    // ---- Assembly input (see docs/assembly_strategies.md) ----
     if (params.assembly_mode == 'coassembly') {
-        assembly_input = FASTP.out.reads
+        // one assembly with every sample
+        assembly_input = trimmed
             .toSortedList { a, b -> a[0] <=> b[0] }
             .map { samples ->
                 tuple('coassembly', samples.collect { it[1] }, samples.collect { it[2] })
             }
+    } else if (params.assembly_mode == 'group') {
+        // one co-assembly per value of the group column
+        assembly_input = trimmed
+            .map { sample, r1, r2, group -> tuple(group, sample, r1, r2) }
+            .groupTuple(sort: { a, b -> a.toString() <=> b.toString() })
+            .map { group, samples, r1s, r2s -> tuple(group, r1s, r2s) }
     } else {
-        assembly_input = FASTP.out.reads
-            .map { sample, r1, r2 -> tuple(sample, [r1], [r2]) }
+        // one assembly per sample
+        assembly_input = trimmed
+            .map { sample, r1, r2, group -> tuple(sample, [r1], [r2]) }
     }
 
     // ---- Assembly and contig filtering ----
@@ -74,14 +101,21 @@ workflow {
     // ---- Read mapping ----
     BOWTIE2_BUILD(FILTER_CONTIGS.out.contigs)
 
-    if (params.assembly_mode == 'coassembly') {
-        // every sample is mapped back to the co-assembly
+    reads_for_mapping = trimmed.map { sample, r1, r2, group -> tuple(sample, r1, r2) }
+
+    if (params.assembly_mode == 'coassembly' || params.map_all_samples) {
+        // every sample is mapped against every assembly: more coverage
+        // profiles for binning, at the cost of more mapping jobs
         mapping_input = BOWTIE2_BUILD.out.index
-            .combine(FASTP.out.reads)
+            .combine(reads_for_mapping)
+    } else if (params.assembly_mode == 'group') {
+        // each sample is mapped against the co-assembly of its own group
+        mapping_input = BOWTIE2_BUILD.out.index
+            .combine(trimmed.map { sample, r1, r2, group -> tuple(group, sample, r1, r2) }, by: 0)
     } else {
-        // each sample is mapped back to its own assembly
+        // each sample is mapped against its own assembly
         mapping_input = BOWTIE2_BUILD.out.index
-            .join(FASTP.out.reads)
+            .join(reads_for_mapping)
             .map { id, index, r1, r2 -> tuple(id, index, id, r1, r2) }
     }
 
@@ -122,6 +156,13 @@ workflow {
     }
 
     BIN_SUMMARY(all_bins.map { id, binner, dir -> dir }.collect())
+
+    // Contig-to-bin map and coverage of every MAG in every sample, the input
+    // for abundance figures downstream
+    MAG_ABUNDANCE(
+        all_bins.map { id, binner, dir -> dir }.collect(),
+        CONTIG_DEPTHS.out.depth.map { id, depth -> depth }.collect()
+    )
 
     // ---- MAG quality ----
     if (!params.skip_checkm2) {
