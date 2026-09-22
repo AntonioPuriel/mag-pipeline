@@ -5,7 +5,8 @@ process CONCOCT {
     publishDir "${params.outdir}/04_binning/concoct", mode: 'copy'
 
     input:
-    tuple val(id), path(contigs), path(bams), path(bais)
+    // cutup and coverage come from CONCOCT_CUTUP and MERGE_CONCOCT_COV (modules/map_depth.nf)
+    tuple val(id), path(contigs), path(cutup_fa), path(coverage)
 
     output:
     tuple val(id), val('concoct'), path("${id}_concoct_bins"), emit: bins
@@ -14,31 +15,20 @@ process CONCOCT {
     """
     gzip -dc ${contigs} > contigs.fa
 
-    # 1. Cut contigs into 10 kb pieces
-    cut_up_fasta.py contigs.fa \\
-        --chunk_size 10000 \\
-        --overlap_size 0 \\
-        --merge_last \\
-        --bedfile contigs_10K.bed \\
-        > contigs_10K.fa
-
-    # 2. Coverage of each piece in each sample
-    concoct_coverage_table.py contigs_10K.bed ${bams} > coverage_table.tsv
-
-    # 3. Clustering
+    # 1. Clustering of the 10 kb pieces
     concoct \\
-        --composition_file contigs_10K.fa \\
-        --coverage_file coverage_table.tsv \\
+        --composition_file ${cutup_fa} \\
+        --coverage_file ${coverage} \\
         --length_threshold ${params.min_contig_length} \\
         --threads ${task.cpus} \\
         --seed 42 \\
         --basename concoct_out/
 
-    # 4. Merge the pieces back into their original contigs
+    # 2. Merge the pieces back into their original contigs
     merge_cutup_clustering.py concoct_out/clustering_gt${params.min_contig_length}.csv \\
         > clustering_merged.csv
 
-    # 5. One FASTA file per bin, named <assembly>.concoct.<cluster>.fa
+    # 3. One FASTA file per bin, named <assembly>.concoct.<cluster>.fa
     mkdir -p ${id}_concoct_bins
     extract_fasta_bins.py contigs.fa clustering_merged.csv --output_path ${id}_concoct_bins
 

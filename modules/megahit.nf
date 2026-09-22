@@ -26,6 +26,9 @@ process MEGAHIT {
     gzip megahit_out/${id}.contigs.fa
     mv megahit_out/${id}.contigs.fa.gz .
     mv megahit_out/${id}.log ${id}.megahit.log
+
+    # intermediate contigs (one set per k-mer size) are not used downstream
+    rm -rf megahit_out
     """
 
     stub:

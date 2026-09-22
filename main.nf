@@ -8,8 +8,7 @@ include { FASTP           } from './modules/fastp'
 include { MEGAHIT         } from './modules/megahit'
 include { FILTER_CONTIGS  } from './modules/filter_contigs'
 include { BOWTIE2_BUILD   } from './modules/bowtie2_build'
-include { BOWTIE2_ALIGN   } from './modules/bowtie2_align'
-include { CONTIG_DEPTHS   } from './modules/contig_depths'
+include { MAP_DEPTH; MERGE_DEPTHS; MERGE_CONCOCT_COV; CONCOCT_CUTUP } from './modules/map_depth'
 include { MAPPING_SUMMARY } from './modules/mapping_summary'
 include { METABAT2        } from './modules/metabat2'
 include { CONCOCT         } from './modules/concoct'
@@ -69,10 +68,16 @@ workflow {
     sample_groups = samplesheet.map { sample, r1, r2, group -> tuple(sample, group) }
 
     // ---- Quality control ----
-    FASTP(reads_ch)
+    // --skip_fastp: the samplesheet already points to trimmed reads
+    if (params.skip_fastp) {
+        trimmed_reads = reads_ch
+    } else {
+        FASTP(reads_ch)
+        trimmed_reads = FASTP.out.reads
+    }
 
     // Trimmed reads with the group of each sample: sample, r1, r2, group
-    trimmed = FASTP.out.reads.join(sample_groups)
+    trimmed = trimmed_reads.join(sample_groups)
 
     // ---- Assembly input (see docs/assembly_strategies.md) ----
     if (params.assembly_mode == 'coassembly') {
@@ -98,47 +103,68 @@ workflow {
     MEGAHIT(assembly_input)
     FILTER_CONTIGS(MEGAHIT.out.contigs)
 
-    // ---- Read mapping ----
+    // ---- Read mapping (BAMs are deleted inside MAP_DEPTH) ----
     BOWTIE2_BUILD(FILTER_CONTIGS.out.contigs)
+
+    // CONCOCT needs its 10 kb pieces before mapping, to compute its coverage
+    // while each BAM still exists
+    if ('concoct' in binners) {
+        CONCOCT_CUTUP(FILTER_CONTIGS.out.contigs)
+        beds = CONCOCT_CUTUP.out.cutup.map { id, fa, bed -> tuple(id, bed) }
+    } else {
+        no_bed = file("${projectDir}/assets/NO_FILE")
+        beds   = FILTER_CONTIGS.out.contigs.map { id, contigs -> tuple(id, no_bed) }
+    }
+
+    // id, index, bed
+    index_bed = BOWTIE2_BUILD.out.index.join(beds)
 
     reads_for_mapping = trimmed.map { sample, r1, r2, group -> tuple(sample, r1, r2) }
 
     if (params.assembly_mode == 'coassembly' || params.map_all_samples) {
         // every sample is mapped against every assembly: more coverage
         // profiles for binning, at the cost of more mapping jobs
-        mapping_input = BOWTIE2_BUILD.out.index
+        mapping_input = index_bed
             .combine(reads_for_mapping)
     } else if (params.assembly_mode == 'group') {
         // each sample is mapped against the co-assembly of its own group
-        mapping_input = BOWTIE2_BUILD.out.index
+        mapping_input = index_bed
             .combine(trimmed.map { sample, r1, r2, group -> tuple(group, sample, r1, r2) }, by: 0)
     } else {
         // each sample is mapped against its own assembly
-        mapping_input = BOWTIE2_BUILD.out.index
+        mapping_input = index_bed
             .join(reads_for_mapping)
-            .map { id, index, r1, r2 -> tuple(id, index, id, r1, r2) }
+            .map { id, index, bed, r1, r2 -> tuple(id, index, bed, id, r1, r2) }
     }
 
-    BOWTIE2_ALIGN(mapping_input)
-    MAPPING_SUMMARY(BOWTIE2_ALIGN.out.log.collect())
+    // id, index, bed, sample, r1, r2
+    MAP_DEPTH(mapping_input)
+    MAPPING_SUMMARY(MAP_DEPTH.out.log.collect())
 
     // ---- Contig coverage per assembly (input for binning) ----
-    bams_per_assembly = BOWTIE2_ALIGN.out.bam
-        .map { id, sample, bam, bai -> tuple(id, bam, bai) }
-        .groupTuple()
-
-    CONTIG_DEPTHS(bams_per_assembly)
+    MERGE_DEPTHS(
+        MAP_DEPTH.out.depth.map { id, sample, depth -> tuple(id, depth) }.groupTuple()
+    )
+    depth_ch = MERGE_DEPTHS.out.depth
 
     // ---- Binning ----
     bins_ch = channel.empty()
 
     if ('metabat2' in binners) {
-        METABAT2(FILTER_CONTIGS.out.contigs.join(CONTIG_DEPTHS.out.depth))
+        METABAT2(FILTER_CONTIGS.out.contigs.join(depth_ch))
         bins_ch = bins_ch.mix(METABAT2.out.bins)
     }
 
     if ('concoct' in binners) {
-        CONCOCT(FILTER_CONTIGS.out.contigs.join(bams_per_assembly))
+        MERGE_CONCOCT_COV(
+            MAP_DEPTH.out.concoct_cov.map { id, sample, cov -> tuple(id, cov) }.groupTuple()
+        )
+        // id, contigs, cutup_fa, coverage
+        CONCOCT(
+            FILTER_CONTIGS.out.contigs
+                .join(CONCOCT_CUTUP.out.cutup.map { id, fa, bed -> tuple(id, fa) })
+                .join(MERGE_CONCOCT_COV.out.coverage)
+        )
         bins_ch = bins_ch.mix(CONCOCT.out.bins)
     }
 
@@ -161,7 +187,7 @@ workflow {
     // for abundance figures downstream
     MAG_ABUNDANCE(
         all_bins.map { id, binner, dir -> dir }.collect(),
-        CONTIG_DEPTHS.out.depth.map { id, depth -> depth }.collect()
+        depth_ch.map { id, depth -> depth }.collect()
     )
 
     // ---- MAG quality ----
@@ -182,6 +208,9 @@ workflow {
 
         MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.collect())
     }
+    else if (params.gtdbtk_db) {
+        log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"
+    }
 
     // ---- Functional annotation (optional, needs the eggNOG database) ----
     if (params.eggnog_db) {
@@ -193,8 +222,5 @@ workflow {
             EGGNOG_MAPPER.out.annotations.map { id, binner, ann -> ann }.collect(),
             PRODIGAL.out.counts.collect()
         )
-    }
-    else if (params.gtdbtk_db) {
-        log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"
     }
 }
