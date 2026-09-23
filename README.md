@@ -18,6 +18,21 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
+## Designed for constrained resources
+
+Developed and tested on a shared SLURM cluster with a 1 TB per-user quota and no
+administrator rights. Peak disk usage is a design constraint, not an afterthought:
+
+| Choice | Effect |
+|--------|--------|
+| Alignments are never kept as persistent BAMs | Each sample is mapped, its depth and coverage computed, and the BAM deleted within the same task, so peak usage scales with `--max_mapping_jobs`, not with the number of samples |
+| MEGAHIT intermediate files are removed after each assembly | Avoids keeping k-mer graphs for the whole run |
+| `--skip_fastp` starts from trimmed reads | Lets you delete the raw FASTQ files once QC is done |
+| Conda environments installed at user level | No root access required |
+
+On 48 samples with 8 co-assemblies and all-vs-all mapping (384 alignments), peak
+usage stays under XXX GB.
+
 ## Quick start
 
 ```bash
