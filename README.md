@@ -20,18 +20,30 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 
 ## Designed for constrained resources
 
-Developed and tested on a shared SLURM cluster with a 1 TB per-user quota and no
-administrator rights. Peak disk usage is a design constraint, not an afterthought:
+Developed and tested on a shared SLURM cluster with a 1 TB per-user quota on a
+shared NFS filesystem, and no administrator rights. Peak disk usage is a design
+constraint, not an afterthought:
 
 | Choice | Effect |
 |--------|--------|
 | Alignments are never kept as persistent BAMs | Each sample is mapped, its depth and coverage computed, and the BAM deleted within the same task, so peak usage scales with `--max_mapping_jobs`, not with the number of samples |
-| MEGAHIT intermediate files are removed after each assembly | Avoids keeping k-mer graphs for the whole run |
+| MEGAHIT intermediate files are removed after each assembly | k-mer graphs are freed as soon as an assembly finishes, instead of accumulating across the run |
 | `--skip_fastp` starts from trimmed reads | Lets you delete the raw FASTQ files once QC is done |
 | Conda environments installed at user level | No root access required |
 
-On 48 samples with 8 co-assemblies and all-vs-all mapping (384 alignments), peak
-usage stays under XXX GB.
+Co-assemblies are the heaviest step: MEGAHIT holds its k-mer graphs until the
+assembly completes, so concurrency has to be capped from the executor rather
+than from the pipeline. On a 48-sample dataset (~280 GB of trimmed reads) split
+into 8 co-assemblies, running them 3 at a time kept peak usage within the
+quota, while 8 at once did not. Set this with `maxForks` in your own config:
+
+```groovy
+process {
+    withName: 'MEGAHIT' {
+        maxForks = 3
+    }
+}
+```
 
 ## Quick start
 
