@@ -92,10 +92,12 @@ the trade-offs and when to dereplicate. Read it before a large run.
 |-----------|---------|-------------|
 | `--input` | – | Samplesheet (CSV) |
 | `--outdir` | `results` | Output directory |
-| `--assembly_mode` | `coassembly` | `coassembly`, `group` or `per_sample`; see [assembly strategies](docs/assembly_strategies.md) |
-| `--map_all_samples` | `false` | Map every sample against every assembly |
+| `--skip_fastp` | `false` | Start from already trimmed reads and skip fastp |
 | `--min_read_length` | `50` | Minimum read length after trimming |
+| `--assembly_mode` | `coassembly` | `coassembly`, `group` or `per_sample`; see [assembly strategies](docs/assembly_strategies.md) |
 | `--min_contig_length` | `1500` | Minimum contig length kept for mapping and binning |
+| `--map_all_samples` | `false` | Map every sample against every assembly |
+| `--max_mapping_jobs` | `8` | Maximum alignment tasks at once; each holds one temporary BAM, so this sets peak disk use during mapping |
 | `--binners` | `concoct,metabat2` | Binners to run: `concoct`, `metabat2` or both |
 | `--refine` | `false` | Combine and refine bins with DAS_Tool |
 | `--dastool_score_threshold` | `0.5` | Minimum DAS_Tool score for a bin to be kept |
