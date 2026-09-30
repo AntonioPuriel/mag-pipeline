@@ -21,6 +21,7 @@ include { PRODIGAL           } from './modules/prodigal'
 include { EGGNOG_MAPPER      } from './modules/eggnog_mapper'
 include { FUNCTIONAL_SUMMARY } from './modules/functional_summary'
 include { MAG_ABUNDANCE      } from './modules/mag_abundance'
+include { GALAH              } from './modules/galah'
 
 workflow {
 
@@ -32,10 +33,13 @@ workflow {
         error "--assembly_mode must be 'coassembly', 'group' or 'per_sample' (got '${params.assembly_mode}'). See docs/assembly_strategies.md"
     }
 
-    if (params.assembly_mode in ['group', 'per_sample']) {
+    if (params.assembly_mode in ['group', 'per_sample'] && !params.dereplicate) {
         log.warn "--assembly_mode ${params.assembly_mode} builds more than one assembly: the same genome can be " +
                  "recovered once per assembly, so MAGs may be redundant across assemblies. " +
-                 "Dereplicate them before counting genomes (see docs/assembly_strategies.md)."
+                 "Use --dereplicate before counting genomes (see docs/assembly_strategies.md)."
+    }
+    if (params.dereplicate && params.skip_checkm2) {
+        error "--dereplicate needs CheckM2 to choose the best genome of each cluster: remove --skip_checkm2"
     }
     if (params.map_all_samples && params.assembly_mode == 'coassembly') {
         log.info "--map_all_samples has no effect with --assembly_mode coassembly: every sample is already mapped"
@@ -141,9 +145,35 @@ workflow {
     MAP_DEPTH(mapping_input)
     MAPPING_SUMMARY(MAP_DEPTH.out.log.collect())
 
+    // Number of alignments expected per assembly. With it, the coverage of an
+    // assembly is merged (and its binning starts) as soon as its own alignments
+    // finish, instead of waiting for every alignment of every assembly.
+    if (params.assembly_mode == 'coassembly' || params.map_all_samples) {
+        // every sample against every assembly
+        n_expected = FILTER_CONTIGS.out.contigs
+            .map { id, contigs -> id }
+            .combine(samplesheet.count())
+    } else if (params.assembly_mode == 'group') {
+        // the samples of each group against their own co-assembly
+        n_expected = sample_groups
+            .map { sample, group -> tuple(group, sample) }
+            .groupTuple()
+            .map { group, samples -> tuple(group, samples.size()) }
+    } else {
+        // each sample against its own assembly
+        n_expected = FILTER_CONTIGS.out.contigs.map { id, contigs -> tuple(id, 1) }
+    }
+
     // ---- Contig coverage per assembly (input for binning) ----
+    // The files of each assembly are grouped as soon as all have arrived, and
+    // sorted by name so that merged columns keep the same order in every run
     MERGE_DEPTHS(
-        MAP_DEPTH.out.depth.map { id, sample, depth -> tuple(id, depth) }.groupTuple()
+        MAP_DEPTH.out.depth
+            .map { id, sample, depth -> tuple(id, depth) }
+            .combine(n_expected, by: 0)
+            .map { id, depth, n -> tuple(groupKey(id, n), depth) }
+            .groupTuple(sort: true)
+            .map { key, depths -> tuple(key.getGroupTarget(), depths) }
     )
     depth_ch = MERGE_DEPTHS.out.depth
 
@@ -157,7 +187,12 @@ workflow {
 
     if ('concoct' in binners) {
         MERGE_CONCOCT_COV(
-            MAP_DEPTH.out.concoct_cov.map { id, sample, cov -> tuple(id, cov) }.groupTuple()
+            MAP_DEPTH.out.concoct_cov
+                .map { id, sample, cov -> tuple(id, cov) }
+                .combine(n_expected, by: 0)
+                .map { id, cov, n -> tuple(groupKey(id, n), cov) }
+                .groupTuple(sort: true)
+                .map { key, covs -> tuple(key.getGroupTarget(), covs) }
         )
         // id, contigs, cutup_fa, coverage
         CONCOCT(
@@ -190,6 +225,10 @@ workflow {
         depth_ch.map { id, depth -> depth }.collect()
     )
 
+    // Bins passed to taxonomy and annotation: all final bins, or only the
+    // dereplicated representatives with --dereplicate
+    annotation_bins = final_bins
+
     // ---- MAG quality ----
     if (!params.skip_checkm2) {
         checkm2_db = params.checkm2_db
@@ -199,10 +238,21 @@ workflow {
         CHECKM2(final_bins, checkm2_db)
         reports = CHECKM2.out.report.map { id, binner, report -> report }
 
+        // ---- Dereplication (optional): one representative per cluster ----
+        // Runs once, when the bins and CheckM2 reports of every assembly are ready
+        if (params.dereplicate) {
+            GALAH(
+                final_bins.map { id, binner, dir -> dir }.collect(),
+                reports.collect()
+            )
+            annotation_bins = GALAH.out.representatives
+                .map { dir -> tuple('dereplicated', 'galah', dir) }
+        }
+
         // ---- Taxonomy (optional, needs the GTDB-Tk reference data) ----
         if (params.gtdbtk_db) {
             gtdbtk_db = file(params.gtdbtk_db, checkIfExists: !workflow.stubRun)
-            GTDB_TK(final_bins, gtdbtk_db)
+            GTDB_TK(annotation_bins, gtdbtk_db)
             reports = reports.mix(GTDB_TK.out.summary.map { id, binner, summary -> summary })
         }
 
@@ -216,7 +266,7 @@ workflow {
     if (params.eggnog_db) {
         eggnog_db = file(params.eggnog_db, checkIfExists: !workflow.stubRun)
 
-        PRODIGAL(final_bins)
+        PRODIGAL(annotation_bins)
         EGGNOG_MAPPER(PRODIGAL.out.proteins, eggnog_db)
         FUNCTIONAL_SUMMARY(
             EGGNOG_MAPPER.out.annotations.map { id, binner, ann -> ann }.collect(),

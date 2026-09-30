@@ -15,6 +15,7 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Binning and bin statistics | CONCOCT, MetaBAT2 | ✅ |
 | Bin refinement (optional) | DAS_Tool | ✅ |
 | MAG quality | CheckM2 | ✅ |
+| MAG dereplication across assemblies (optional) | galah | ✅ |
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
@@ -29,21 +30,33 @@ constraint, not an afterthought:
 | Alignments are never kept as persistent BAMs | Each sample is mapped, its depth and coverage computed, and the BAM deleted within the same task, so peak usage scales with `--max_mapping_jobs`, not with the number of samples |
 | MEGAHIT intermediate files are removed after each assembly | k-mer graphs are freed as soon as an assembly finishes, instead of accumulating across the run |
 | `--skip_fastp` starts from trimmed reads | Lets you delete the raw FASTQ files once QC is done |
+| Each assembly is binned as soon as its own alignments finish | Binning, refinement and CheckM2 of finished assemblies run while the others are still being assembled |
 | Conda environments installed at user level | No root access required |
 
 Co-assemblies are the heaviest step: MEGAHIT holds its k-mer graphs until the
 assembly completes, so concurrency has to be capped from the executor rather
 than from the pipeline. On a 48-sample dataset (~280 GB of trimmed reads) split
-into 8 co-assemblies, running them 3 at a time kept peak usage within the
-quota, while 8 at once did not. Set this with `maxForks` in your own config:
+into 8 co-assemblies, 8 at once filled the 1 TB quota and 3 at once came within
+200 GB of it; 2 at once left a comfortable margin. Set this with `maxForks` in
+your own config:
 
 ```groovy
 process {
     withName: 'MEGAHIT' {
-        maxForks = 3
+        maxForks = 2
     }
 }
 ```
+
+Two more things that matter on a quota-limited cluster:
+
+- When a run is interrupted, Nextflow keeps the work directories of the tasks
+  that were running. An interrupted MEGAHIT task can hold 80-250 GB: delete
+  those directories (exit status 143 in `.exitcode`) before resuming.
+- If the task script uses `task.cpus`, as MEGAHIT's does, changing the number
+  of cores changes the task hash, and `-resume` re-runs the finished
+  assemblies. To give more cores to new assemblies only, set `cpus` with a
+  condition on the assembly id.
 
 ## Quick start
 
@@ -103,6 +116,10 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--dastool_score_threshold` | `0.5` | Minimum DAS_Tool score for a bin to be kept |
 | `--checkm2_db` | – | CheckM2 DIAMOND database (`uniref100.KO.1.dmnd`) |
 | `--skip_checkm2` | `false` | Skip MAG quality assessment |
+| `--dereplicate` | `false` | Cluster the MAGs of all assemblies and keep one representative per cluster |
+| `--derep_ani` | `95` | ANI (%) that defines a cluster; 95 is the usual species boundary |
+| `--derep_min_completeness` | `50` | Bins below this CheckM2 completeness are left out of dereplication |
+| `--derep_max_contamination` | `10` | Bins above this CheckM2 contamination are left out of dereplication |
 | `--gtdbtk_db` | – | GTDB-Tk reference data directory (enables taxonomy) |
 | `--gtdbtk_pplacer_cpus` | `1` | Threads for pplacer; more threads multiply memory use |
 | `--gtdbtk_args` | – | Extra flags for `gtdbtk classify_wf` |
@@ -124,7 +141,8 @@ results/
 │   ├── metabat2/   # one FASTA per bin
 │   └── dastool/    # refined bins (with --refine)
 ├── 05_quality/     # mag_quality.tsv: final table with quality and taxonomy per MAG
-│   └── checkm2/    # CheckM2 reports
+│   ├── checkm2/    # CheckM2 reports
+│   └── dereplication/  # representatives/ and dereplication_clusters.tsv (with --dereplicate)
 ├── 06_taxonomy/    # GTDB-Tk classification (with --gtdbtk_db)
 ├── 07_function/    # ko_per_mag.tsv, annotation_stats.tsv (with --eggnog_db)
 │   └── genes/      # protein sequences and gene counts per MAG
@@ -144,6 +162,26 @@ results/
 rRNA and tRNA presence, also part of the MIMAG high-quality standard, is not assessed.
 
 When `--refine` is used, CheckM2 and GTDB-Tk evaluate the DAS_Tool bins; otherwise they evaluate the bins of each binner.
+
+## Dereplication
+
+With `--assembly_mode group` or `per_sample`, the same genome is usually
+recovered once per assembly. `--dereplicate` clusters the final bins of every
+assembly with [galah](https://github.com/wwood/galah) at 95 % ANI (species
+level) and keeps the best bin of each cluster, ranked by CheckM2 completeness
+and contamination. Bins below `--derep_min_completeness` or above
+`--derep_max_contamination` are left out.
+
+The step runs once, after CheckM2 has finished for every assembly, and writes
+`05_quality/dereplication/`:
+
+- `representatives/`: one FASTA per representative MAG
+- `dereplication_clusters.tsv`: `representative<TAB>member`, one row per bin
+
+With `--dereplicate`, GTDB-Tk, Prodigal and eggNOG-mapper run only on the
+representatives, so each genome is classified and annotated once. Bin names
+must be unique across assemblies; the pipeline names them after their
+assembly, so this holds unless bins are renamed by hand.
 
 ## Functional annotation
 
