@@ -20,7 +20,7 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "16px"}}}%%
+%%{init: {"themeVariables": {"fontSize": "8px"}}}%%
 flowchart TB
     R[Paired-end reads] --> Q["fastp<br/>QC and trimming"]
     Q --> A["MEGAHIT<br/>co-assembly per group or per sample"]
