@@ -19,7 +19,7 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
-```mermaid```mermaid
+```mermaid
 flowchart LR
     R[Paired-end reads] --> Q["fastp<br/>QC and trimming"]
     Q --> A["MEGAHIT<br/>co-assembly per group<br/>or per sample"]
@@ -39,8 +39,6 @@ flowchart LR
     classDef opt stroke-dasharray: 5 5
     class Q,D,G,T,P opt
 ```
-
-Dashed boxes are optional steps (`--skip_fastp`, `--refine`, `--dereplicate`, `--gtdbtk_db`, `--eggnog_db`).
 
 ## Designed for constrained resources
 
