@@ -20,17 +20,18 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
 ```mermaid
-flowchart LR
+%%{init: {"themeVariables": {"fontSize": "16px"}}}%%
+flowchart TB
     R[Paired-end reads] --> Q["fastp<br/>QC and trimming"]
-    Q --> A["MEGAHIT<br/>co-assembly per group<br/>or per sample"]
-    A --> F["Contig filter<br/>≥ 1500 bp"]
+    Q --> A["MEGAHIT<br/>co-assembly per group or per sample"]
+    A --> F["Contig filter ≥ 1500 bp"]
     F --> M["Bowtie2 + samtools<br/>every sample → every assembly<br/>depths kept, BAM deleted"]
     M --> C1[CONCOCT]
     M --> C2[MetaBAT2]
-    C1 --> D["DAS_Tool<br/>refinement"]
+    C1 --> D["DAS_Tool refinement"]
     C2 --> D
-    D --> K["CheckM2<br/>MAG quality"]
-    K --> G["galah<br/>dereplication, 95 % ANI"]
+    D --> K["CheckM2 MAG quality"]
+    K --> G["galah dereplication, 95 % ANI"]
     G --> T["GTDB-Tk<br/>taxonomy"]
     G --> P["Prodigal + eggNOG-mapper<br/>function"]
 
@@ -38,7 +39,7 @@ flowchart LR
     K -- quality --> O
     T -. taxonomy .-> O
     P -. KOs .-> O
-    O[("Output tables<br/>mag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag<br/>run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy,<br/>pathways + HTML report"]
+    O[("Output tables<br/>mag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
 
     classDef opt stroke-dasharray: 5 5
     class Q,D,G,T,P opt
