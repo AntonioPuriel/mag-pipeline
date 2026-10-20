@@ -33,8 +33,12 @@ flowchart LR
     K --> G["galah<br/>dereplication, 95 % ANI"]
     G --> T["GTDB-Tk<br/>taxonomy"]
     G --> P["Prodigal + eggNOG-mapper<br/>function"]
-    K --> O[("mag_quality.tsv<br/>mag_abundance.tsv<br/>run_info.txt")]
-    O --> MR["magreport (R)<br/>figures + HTML report"]
+
+    M -- depths --> O
+    K -- quality --> O
+    T -. taxonomy .-> O
+    P -. KOs .-> O
+    O[("Output tables<br/>mag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag<br/>run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy,<br/>pathways + HTML report"]
 
     classDef opt stroke-dasharray: 5 5
     class Q,D,G,T,P opt
