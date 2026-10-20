@@ -126,6 +126,7 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--eggnog_db` | – | eggNOG-mapper data directory (enables functional annotation) |
 | `--eggnog_dbmem` | `false` | Load the eggNOG database in RAM (~45 GB, much faster) |
 | `--eggnog_args` | – | Extra flags for `emapper.py` |
+| `--email` | – | Address that receives a summary (status, error, run information) when the run ends, sent with the `mail` command of the machine running Nextflow |
 
 ## Output
 
