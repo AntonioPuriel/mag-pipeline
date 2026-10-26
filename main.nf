@@ -206,7 +206,7 @@ workflow {
     // ---- Bin refinement (optional) ----
     if (params.refine) {
         dastool_input = FILTER_CONTIGS.out.contigs
-            .join(bins_ch.map { id, binner, dir -> tuple(id, dir) }.groupTuple())
+            .join(bins_ch.map { id, binner, dir -> tuple(id, dir) }.groupTuple(size: binners.size()))
 
         DAS_TOOL(dastool_input)
         final_bins = DAS_TOOL.out.bins
