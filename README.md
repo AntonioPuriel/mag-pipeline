@@ -31,19 +31,31 @@ flowchart TB
     C1 --> D["DAS_Tool refinement"]
     C2 --> D
     D --> K["CheckM2 MAG quality"]
+    D --> U["GUNC<br/>chimera check"]
     K --> G["galah dereplication, 95 % ANI"]
+    U -.-> G
     G --> T["GTDB-Tk<br/>taxonomy"]
     G --> P["Prodigal + eggNOG-mapper<br/>function"]
+    T --> Y["Phylogenomic tree<br/>GTDB-Tk marker alignment + FastTree"]
 
     M -- depths --> O
     K -- quality --> O
+    U -. chimera flag .-> O
     T -. taxonomy .-> O
+    Y -. tree .-> O
     P -. KOs .-> O
     O[("Output tables<br/>mag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
 
     classDef opt stroke-dasharray: 5 5
+    classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
     class Q,D,G,T,P opt
+    class U,Y planned
 ```
+
+Dashed boxes are optional steps. Grey boxes are planned: a phylogenomic tree
+of the dereplicated genomes, built from the marker alignment GTDB-Tk already
+computes (v1.7), and a GUNC chimera check next to CheckM2 that flags genomes
+mixing different lineages before dereplication (v1.8).
 
 ## Designed for constrained resources
 
