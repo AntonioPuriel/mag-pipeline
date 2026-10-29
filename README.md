@@ -48,14 +48,13 @@ flowchart TB
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
-    class Q,D,G,T,P opt
-    class U,Y planned
+    class Q,D,U,G,T,P opt
+    class Y planned
 ```
 
-Dashed boxes are optional steps. Grey boxes are planned: a phylogenomic tree
+Dashed boxes are optional steps. The grey box is planned: a phylogenomic tree
 of the dereplicated genomes, built from the marker alignment GTDB-Tk already
-computes (v1.7), and a GUNC chimera check next to CheckM2 that flags genomes
-mixing different lineages before dereplication (v1.8).
+computes.
 
 ## Designed for constrained resources
 
@@ -158,6 +157,8 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--derep_ani` | `95` | ANI (%) that defines a cluster; 95 is the usual species boundary |
 | `--derep_min_completeness` | `50` | Bins below this CheckM2 completeness are left out of dereplication |
 | `--derep_max_contamination` | `10` | Bins above this CheckM2 contamination are left out of dereplication |
+| `--gunc_db` | – | GUNC database (`.dmnd` from `gunc download_db`); enables the chimera check |
+| `--gunc_exclude` | `false` | Leave genomes that GUNC flags as chimeric out of dereplication |
 | `--gtdbtk_db` | – | GTDB-Tk reference data directory (enables taxonomy) |
 | `--gtdbtk_pplacer_cpus` | `1` | Threads for pplacer; more threads multiply memory use |
 | `--gtdbtk_args` | – | Extra flags for `gtdbtk classify_wf` |
@@ -181,6 +182,7 @@ results/
 │   └── dastool/    # refined bins (with --refine)
 ├── 05_quality/     # mag_quality.tsv: final table with quality and taxonomy per MAG
 │   ├── checkm2/    # CheckM2 reports
+│   ├── gunc/       # GUNC chimera reports (with --gunc_db)
 │   └── dereplication/  # representatives/ and dereplication_clusters.tsv (with --dereplicate)
 ├── 06_taxonomy/    # GTDB-Tk classification (with --gtdbtk_db)
 ├── 07_function/    # ko_per_mag.tsv, annotation_stats.tsv (with --eggnog_db)
@@ -210,6 +212,18 @@ assembly with [galah](https://github.com/wwood/galah) at 95 % ANI (species
 level) and keeps the best bin of each cluster, ranked by CheckM2 completeness
 and contamination. Bins below `--derep_min_completeness` or above
 `--derep_max_contamination` are left out.
+
+## Chimera check
+
+CheckM2 measures completeness and contamination from marker genes, but a bin
+that mixes two incomplete genomes of different lineages can still look clean.
+With `--gunc_db`, [GUNC](https://github.com/grp-bork/gunc) runs on the final
+bins of each assembly, next to CheckM2, and checks whether the genes of each
+bin agree on one lineage. It only reports: `mag_quality.tsv` gets a `gunc`
+column (`pass`, `fail`, or `NA` when GUNC was not run), and the full reports
+go to `05_quality/gunc/`. With `--gunc_exclude`, genomes that fail are left out
+of dereplication, so a chimera can never become a representative; the list is
+written to `05_quality/dereplication/gunc_excluded.txt`.
 
 The step runs once, after CheckM2 has finished for every assembly, and writes
 `05_quality/dereplication/`:

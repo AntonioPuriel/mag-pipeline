@@ -22,6 +22,7 @@ include { EGGNOG_MAPPER      } from './modules/eggnog_mapper'
 include { FUNCTIONAL_SUMMARY } from './modules/functional_summary'
 include { MAG_ABUNDANCE      } from './modules/mag_abundance'
 include { GALAH              } from './modules/galah'
+include { GUNC               } from './modules/gunc'
 
 workflow {
 
@@ -37,6 +38,12 @@ workflow {
         log.warn "--assembly_mode ${params.assembly_mode} builds more than one assembly: the same genome can be " +
                  "recovered once per assembly, so MAGs may be redundant across assemblies. " +
                  "Use --dereplicate before counting genomes (see docs/assembly_strategies.md)."
+    }
+    if (params.gunc_exclude && !params.gunc_db) {
+        error "--gunc_exclude needs --gunc_db: GUNC has to run to know which genomes are chimeric"
+    }
+    if (params.gunc_exclude && !params.dereplicate) {
+        log.warn "--gunc_exclude only acts on dereplication: without --dereplicate, chimeric genomes are flagged in mag_quality.tsv but kept"
     }
     if (params.dereplicate && params.skip_checkm2) {
         error "--dereplicate needs CheckM2 to choose the best genome of each cluster: remove --skip_checkm2"
@@ -229,6 +236,16 @@ workflow {
     // dereplicated representatives with --dereplicate
     annotation_bins = final_bins
 
+    // ---- Chimera check (optional, needs the GUNC database) ----
+    // Runs per assembly, next to CheckM2; it flags chimeric genomes but does
+    // not change any bin
+    gunc_reports = channel.empty()
+    if (params.gunc_db) {
+        gunc_db = file(params.gunc_db, checkIfExists: !workflow.stubRun)
+        GUNC(final_bins, gunc_db)
+        gunc_reports = GUNC.out.report.map { id, binner, report -> report }
+    }
+
     // ---- MAG quality ----
     if (!params.skip_checkm2) {
         checkm2_db = params.checkm2_db
@@ -243,7 +260,8 @@ workflow {
         if (params.dereplicate) {
             GALAH(
                 final_bins.map { id, binner, dir -> dir }.collect(),
-                reports.collect()
+                reports.collect(),
+                params.gunc_db ? gunc_reports.collect() : file("${projectDir}/assets/NO_FILE")
             )
             annotation_bins = GALAH.out.representatives
                 .map { dir -> tuple('dereplicated', 'galah', dir) }
@@ -256,7 +274,7 @@ workflow {
             reports = reports.mix(GTDB_TK.out.summary.map { id, binner, summary -> summary })
         }
 
-        MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.collect())
+        MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.mix(gunc_reports).collect())
     }
     else if (params.gtdbtk_db) {
         log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"

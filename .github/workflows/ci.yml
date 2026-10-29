@@ -23,3 +23,5 @@ jobs:
         run: nextflow run . -profile test -stub-run --refine --gtdbtk_db assets/NO_FILE --eggnog_db assets/NO_FILE --outdir results_taxonomy
       - name: Stub run (co-assembly by group, every sample mapped against every assembly)
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --outdir results_groups
+      - name: Stub run (chimera check with GUNC before dereplication)
+        run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --gunc_db assets/NO_FILE --gunc_exclude --outdir results_gunc

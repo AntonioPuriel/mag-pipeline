@@ -7,6 +7,7 @@
 # Input files are recognised by their name:
 #   <assembly>_<binner>.checkm2.tsv   CheckM2 report
 #   <assembly>_<binner>.gtdbtk.tsv    GTDB-Tk classification
+#   <assembly>_<binner>.gunc.tsv      GUNC chimera check (column gunc: pass, fail or NA)
 # Usage: mag_quality.sh <bin_summary.tsv> <report.tsv> [...]
 set -euo pipefail
 
@@ -18,7 +19,7 @@ fi
 bin_summary=$1
 shift
 
-printf "assembly\tbinner\tbin\tn_contigs\ttotal_length\tn50\tgc_pct\tcompleteness\tcontamination\tquality\tdomain\tphylum\tclass\torder\tfamily\tgenus\tspecies\tclosest_ani\n"
+printf "assembly\tbinner\tbin\tn_contigs\ttotal_length\tn50\tgc_pct\tcompleteness\tcontamination\tquality\tdomain\tphylum\tclass\torder\tfamily\tgenus\tspecies\tclosest_ani\tgunc\n"
 
 awk -F '\t' -v OFS='\t' -v summary="$bin_summary" '
     function rank(classification, prefix,   i, n, parts, value) {
@@ -36,19 +37,20 @@ awk -F '\t' -v OFS='\t' -v summary="$bin_summary" '
     FNR == 1 && FILENAME != summary {
         base = FILENAME
         sub(/.*\//, "", base)
-        kind = (base ~ /\.gtdbtk\.tsv$/) ? "gtdbtk" : "checkm2"
-        sub(/\.(checkm2|gtdbtk)\.tsv$/, "", base)
+        kind = (base ~ /\.gtdbtk\.tsv$/) ? "gtdbtk" : (base ~ /\.gunc\.tsv$/) ? "gunc" : "checkm2"
+        sub(/\.(checkm2|gtdbtk|gunc)\.tsv$/, "", base)
         n = split(base, parts, "_")
         binner = parts[n]
         assembly = substr(base, 1, length(base) - length(binner) - 1)
 
-        c_name = c_comp = c_cont = c_class = c_ani = 0
+        c_name = c_comp = c_cont = c_class = c_ani = c_pass = 0
         for (i = 1; i <= NF; i++) {
-            if ($i == "Name" || $i == "user_genome") c_name  = i
+            if ($i == "Name" || $i == "user_genome" || $i == "genome") c_name = i
             if ($i == "Completeness")                c_comp  = i
             if ($i == "Contamination")               c_cont  = i
             if ($i == "classification")              c_class = i
             if ($i == "closest_genome_ani" || $i == "fastani_ani") c_ani = i
+            if ($i == "pass.GUNC")                   c_pass  = i
         }
         next
     }
@@ -58,6 +60,8 @@ awk -F '\t' -v OFS='\t' -v summary="$bin_summary" '
         if (kind == "checkm2") {
             comp[key] = $c_comp
             cont[key] = $c_cont
+        } else if (kind == "gunc") {
+            if (c_pass) gunc[key] = ($c_pass == "True") ? "pass" : ($c_pass == "False") ? "fail" : "NA"
         } else {
             tax[key] = (c_class ? $c_class : "")
             ani[key] = (c_ani  ? $c_ani  : "NA")
@@ -77,11 +81,12 @@ awk -F '\t' -v OFS='\t' -v summary="$bin_summary" '
 
         classification = (key in tax) ? tax[key] : ""
         closest = (key in ani) ? ani[key] : "NA"
+        chimera = (key in gunc) ? gunc[key] : "NA"
 
         print $1, $2, $3, $4, $5, $6, $7, comp[key], cont[key], quality,
               rank(classification, "d__"), rank(classification, "p__"),
               rank(classification, "c__"), rank(classification, "o__"),
               rank(classification, "f__"), rank(classification, "g__"),
-              rank(classification, "s__"), closest
+              rank(classification, "s__"), closest, chimera
     }
 ' "$@" "$bin_summary" | sort -t $'\t' -k1,1 -k2,2 -k8,8gr
