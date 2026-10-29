@@ -23,6 +23,9 @@ include { FUNCTIONAL_SUMMARY } from './modules/functional_summary'
 include { MAG_ABUNDANCE      } from './modules/mag_abundance'
 include { GALAH              } from './modules/galah'
 include { GUNC               } from './modules/gunc'
+include { BARRNAP            } from './modules/barrnap'
+include { TRNASCAN           } from './modules/trnascan'
+include { MIMAG_QUALITY      } from './modules/mimag_quality'
 
 workflow {
 
@@ -47,6 +50,12 @@ workflow {
     }
     if (params.dereplicate && params.skip_checkm2) {
         error "--dereplicate needs CheckM2 to choose the best genome of each cluster: remove --skip_checkm2"
+    }
+    if (params.mimag && params.skip_checkm2) {
+        error "--mimag needs CheckM2 completeness and contamination: remove --skip_checkm2"
+    }
+    if (params.mimag && !params.dereplicate) {
+        log.info "--mimag without --dereplicate: rRNA and tRNA genes are searched in every final bin of every assembly"
     }
     if (params.map_all_samples && params.assembly_mode == 'coassembly') {
         log.info "--map_all_samples has no effect with --assembly_mode coassembly: every sample is already mapped"
@@ -253,7 +262,8 @@ workflow {
             : file("${projectDir}/assets/NO_FILE")
 
         CHECKM2(final_bins, checkm2_db)
-        reports = CHECKM2.out.report.map { id, binner, report -> report }
+        checkm2_reports = CHECKM2.out.report.map { id, binner, report -> report }
+        reports = checkm2_reports
 
         // ---- Dereplication (optional): one representative per cluster ----
         // Runs once, when the bins and CheckM2 reports of every assembly are ready
@@ -268,10 +278,30 @@ workflow {
         }
 
         // ---- Taxonomy (optional, needs the GTDB-Tk reference data) ----
+        gtdbtk_reports = channel.empty()
         if (params.gtdbtk_db) {
             gtdbtk_db = file(params.gtdbtk_db, checkIfExists: !workflow.stubRun)
             GTDB_TK(annotation_bins, gtdbtk_db)
-            reports = reports.mix(GTDB_TK.out.summary.map { id, binner, summary -> summary })
+            gtdbtk_reports = GTDB_TK.out.summary.map { id, binner, summary -> summary }
+            reports = reports.mix(gtdbtk_reports)
+        }
+
+        // ---- MIMAG standard (optional): rRNA and tRNA genes ----
+        // Run on the same genomes as taxonomy: the dereplicated representatives
+        // with --dereplicate. They only add steps after galah, so they can be
+        // added to a finished run with -resume
+        if (params.mimag) {
+            BARRNAP(annotation_bins)
+            TRNASCAN(annotation_bins)
+            no_file = file("${projectDir}/assets/NO_FILE")
+            MIMAG_QUALITY(
+                BIN_SUMMARY.out.tsv,
+                checkm2_reports.collect(),
+                BARRNAP.out.summary.map { id, binner, tsv -> tsv }.collect(),
+                TRNASCAN.out.summary.map { id, binner, tsv -> tsv }.collect(),
+                params.gunc_db   ? gunc_reports.collect()   : no_file,
+                params.gtdbtk_db ? gtdbtk_reports.collect() : no_file
+            )
         }
 
         MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.mix(gunc_reports).collect())

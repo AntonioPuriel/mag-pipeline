@@ -25,3 +25,5 @@ jobs:
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --outdir results_groups
       - name: Stub run (chimera check with GUNC before dereplication)
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --gunc_db assets/NO_FILE --gunc_exclude --outdir results_gunc
+      - name: Stub run (MIMAG table on the dereplicated genomes, with taxonomy)
+        run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --gunc_db assets/NO_FILE --gunc_exclude --gtdbtk_db assets/NO_FILE --mimag --outdir results_mimag

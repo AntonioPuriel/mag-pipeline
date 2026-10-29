@@ -16,6 +16,8 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Bin refinement (optional) | DAS_Tool | ✅ |
 | MAG quality | CheckM2 | ✅ |
 | MAG dereplication across assemblies (optional) | galah | ✅ |
+| Chimera check (optional) | GUNC | ✅ |
+| rRNA and tRNA genes, MIMAG category (optional) | barrnap, tRNAscan-SE | ✅ |
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
@@ -36,6 +38,7 @@ flowchart TB
     U -.-> G
     G --> T["GTDB-Tk<br/>taxonomy"]
     G --> P["Prodigal + eggNOG-mapper<br/>function"]
+    G --> MI["barrnap + tRNAscan-SE<br/>rRNA and tRNA genes"]
     T --> Y["Phylogenomic tree<br/>GTDB-Tk marker alignment + FastTree"]
 
     M -- depths --> O
@@ -44,11 +47,12 @@ flowchart TB
     T -. taxonomy .-> O
     Y -. tree .-> O
     P -. KOs .-> O
-    O[("Output tables<br/>mag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
+    MI -. MIMAG category .-> O
+    O[("Output tables<br/>mag_quality · mimag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
-    class Q,D,U,G,T,P opt
+    class Q,D,U,G,T,P,MI opt
     class Y planned
 ```
 
@@ -159,6 +163,7 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--derep_max_contamination` | `10` | Bins above this CheckM2 contamination are left out of dereplication |
 | `--gunc_db` | – | GUNC database (`.dmnd` from `gunc download_db`); enables the chimera check |
 | `--gunc_exclude` | `false` | Leave genomes that GUNC flags as chimeric out of dereplication |
+| `--mimag` | `false` | Search rRNA (barrnap) and tRNA (tRNAscan-SE) genes and write `mimag_quality.tsv` with the MIMAG category of each genome |
 | `--gtdbtk_db` | – | GTDB-Tk reference data directory (enables taxonomy) |
 | `--gtdbtk_pplacer_cpus` | `1` | Threads for pplacer; more threads multiply memory use |
 | `--gtdbtk_args` | – | Extra flags for `gtdbtk classify_wf` |
@@ -181,8 +186,10 @@ results/
 │   ├── metabat2/   # one FASTA per bin
 │   └── dastool/    # refined bins (with --refine)
 ├── 05_quality/     # mag_quality.tsv: final table with quality and taxonomy per MAG
+│   │               # mimag_quality.tsv: MIMAG category with rRNA and tRNA genes (with --mimag)
 │   ├── checkm2/    # CheckM2 reports
 │   ├── gunc/       # GUNC chimera reports (with --gunc_db)
+│   ├── mimag/      # barrnap GFF, tRNAscan-SE output and their summaries (with --mimag)
 │   └── dereplication/  # representatives/ and dereplication_clusters.tsv (with --dereplicate)
 ├── 06_taxonomy/    # GTDB-Tk classification (with --gtdbtk_db)
 ├── 07_function/    # ko_per_mag.tsv, annotation_stats.tsv (with --eggnog_db)
@@ -200,7 +207,9 @@ results/
 | medium | ≥ 50 % | < 10 % |
 | low | anything below medium | |
 
-rRNA and tRNA presence, also part of the MIMAG high-quality standard, is not assessed.
+These categories use CheckM2 only. The MIMAG high-quality standard also asks
+for rRNA and tRNA genes: `--mimag` checks them and writes a separate table (see
+below).
 
 When `--refine` is used, CheckM2 and GTDB-Tk evaluate the DAS_Tool bins; otherwise they evaluate the bins of each binner.
 
@@ -235,6 +244,39 @@ With `--dereplicate`, GTDB-Tk, Prodigal and eggNOG-mapper run only on the
 representatives, so each genome is classified and annotated once. Bin names
 must be unique across assemblies; the pipeline names them after their
 assembly, so this holds unless bins are renamed by hand.
+
+## MIMAG standard
+
+The MIMAG standard ([Bowers et al. 2017](https://doi.org/10.1038/nbt.3893)) is
+what repositories and data journals expect when genomes are released. With
+`--mimag`, the genomes that go to taxonomy (the dereplicated representatives
+with `--dereplicate`, otherwise every final bin) are searched for rRNA genes
+with [barrnap](https://github.com/tseemann/barrnap) and for tRNA genes with
+[tRNAscan-SE](https://github.com/UCSC-LoweLab/tRNAscan-SE), and
+`05_quality/mimag_quality.tsv` assigns each one its category:
+
+| Category | Completeness | Contamination | rRNA genes | tRNAs |
+|----------|--------------|---------------|------------|-------|
+| high | > 90 % | < 5 % | 5S, 16S and 23S | ≥ 18 of the 20 amino acids |
+| medium | ≥ 50 % | < 10 % | | |
+| low | anything below medium | | | |
+
+A genome with high CheckM2 values but a missing rRNA gene or too few tRNAs is
+medium; the column `limiting` says what keeps each genome below high, and
+`trna_missing` which amino acids lack a tRNA. rRNA genes are often missing from
+short-read MAGs because their repeated copies break the assembly, so expect
+fewer high-quality genomes here than in `mag_quality.tsv`.
+
+The genomes have no taxonomy when these steps run, so both tools search with
+their bacterial and archaeal models. The domain comes from GTDB-Tk when
+`--gtdbtk_db` is used (`domain_source` = `gtdbtk`); otherwise the model that
+finds more rRNA types, then more tRNA types, is kept (`rrna_trna`). barrnap
+genes shorter than the full model still count, and are reported in
+`rrna_partial`. The table also carries size, N50, GC, CheckM2, GUNC and GTDB-Tk
+columns, so it can be submitted as it is.
+
+These steps only run after dereplication, so they can be added to a finished
+run with `-resume` without repeating anything before them.
 
 ## Functional annotation
 

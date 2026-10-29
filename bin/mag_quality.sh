@@ -65,6 +65,10 @@ awk -F '\t' -v OFS='\t' -v summary="$bin_summary" '
         } else {
             tax[key] = (c_class ? $c_class : "")
             ani[key] = (c_ani  ? $c_ani  : "NA")
+            # With --dereplicate, GTDB-Tk classifies the representatives as one
+            # set (dereplicated_galah), so they are also matched by bin name
+            tax_by_name[$c_name] = tax[key]
+            ani_by_name[$c_name] = ani[key]
         }
         next
     }
@@ -79,8 +83,8 @@ awk -F '\t' -v OFS='\t' -v summary="$bin_summary" '
         k = cont[key] + 0
         quality = (c >= 90 && k < 5) ? "high" : (c >= 50 && k < 10) ? "medium" : "low"
 
-        classification = (key in tax) ? tax[key] : ""
-        closest = (key in ani) ? ani[key] : "NA"
+        classification = (key in tax) ? tax[key] : ($3 in tax_by_name) ? tax_by_name[$3] : ""
+        closest = (key in ani) ? ani[key] : ($3 in ani_by_name) ? ani_by_name[$3] : "NA"
         chimera = (key in gunc) ? gunc[key] : "NA"
 
         print $1, $2, $3, $4, $5, $6, $7, comp[key], cont[key], quality,
