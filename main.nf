@@ -26,6 +26,9 @@ include { GUNC               } from './modules/gunc'
 include { BARRNAP            } from './modules/barrnap'
 include { TRNASCAN           } from './modules/trnascan'
 include { MIMAG_QUALITY      } from './modules/mimag_quality'
+include { CANTHYD             } from './modules/canthyd'
+include { HADEG               } from './modules/hadeg'
+include { HYDROCARBON_SUMMARY } from './modules/hydrocarbon_summary'
 
 workflow {
 
@@ -310,15 +313,41 @@ workflow {
         log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"
     }
 
+    // ---- Gene calling: for eggNOG and the hydrocarbon databases ----
+    if (params.eggnog_db || params.canthyd_db || params.hadeg_db) {
+        PRODIGAL(annotation_bins)
+    }
+
     // ---- Functional annotation (optional, needs the eggNOG database) ----
     if (params.eggnog_db) {
         eggnog_db = file(params.eggnog_db, checkIfExists: !workflow.stubRun)
 
-        PRODIGAL(annotation_bins)
         EGGNOG_MAPPER(PRODIGAL.out.proteins, eggnog_db)
         FUNCTIONAL_SUMMARY(
             EGGNOG_MAPPER.out.annotations.map { id, binner, ann -> ann }.collect(),
             PRODIGAL.out.counts.collect()
         )
+    }
+
+    // ---- Hydrocarbon degradation genes (optional) ----
+    // CANT-HYD: HMMs of aerobic and anaerobic marker genes (trusted cutoffs)
+    // HADEG: experimentally validated aerobic degradation proteins, by pathway
+    if (params.canthyd_db || params.hadeg_db) {
+        no_file = file("${projectDir}/assets/NO_FILE")
+        canthyd_hits = no_file
+        hadeg_hits   = no_file
+
+        if (params.canthyd_db) {
+            canthyd_hmm = file(params.canthyd_db, checkIfExists: !workflow.stubRun)
+            CANTHYD(PRODIGAL.out.proteins, canthyd_hmm)
+            canthyd_hits = CANTHYD.out.hits.map { id, binner, tsv -> tsv }.collect()
+        }
+        if (params.hadeg_db) {
+            hadeg_dir = file(params.hadeg_db, checkIfExists: !workflow.stubRun)
+            HADEG(PRODIGAL.out.proteins, hadeg_dir)
+            hadeg_hits = HADEG.out.hits.map { id, binner, tsv -> tsv }.collect()
+        }
+
+        HYDROCARBON_SUMMARY(canthyd_hits, hadeg_hits)
     }
 }

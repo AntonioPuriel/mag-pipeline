@@ -18,6 +18,7 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | MAG dereplication across assemblies (optional) | galah | ✅ |
 | Chimera check (optional) | GUNC | ✅ |
 | rRNA and tRNA genes, MIMAG category (optional) | barrnap, tRNAscan-SE | ✅ |
+| Hydrocarbon degradation genes (optional) | CANT-HYD (HMMER), HADEG (DIAMOND) | ✅ |
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 
@@ -39,6 +40,7 @@ flowchart TB
     G --> T["GTDB-Tk<br/>taxonomy"]
     G --> P["Prodigal + eggNOG-mapper<br/>function"]
     G --> MI["barrnap + tRNAscan-SE<br/>rRNA and tRNA genes"]
+    P --> HC["CANT-HYD + HADEG<br/>hydrocarbon degradation genes"]
     T --> Y["Phylogenomic tree<br/>GTDB-Tk marker alignment + FastTree"]
 
     M -- depths --> O
@@ -48,11 +50,12 @@ flowchart TB
     Y -. tree .-> O
     P -. KOs .-> O
     MI -. MIMAG category .-> O
+    HC -. hydrocarbon genes .-> O
     O[("Output tables<br/>mag_quality · mimag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
-    class Q,D,U,G,T,P,MI opt
+    class Q,D,U,G,T,P,MI,HC opt
     class Y planned
 ```
 
@@ -170,6 +173,10 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--eggnog_db` | – | eggNOG-mapper data directory (enables functional annotation) |
 | `--eggnog_dbmem` | `false` | Load the eggNOG database in RAM (~45 GB, much faster) |
 | `--eggnog_args` | – | Extra flags for `emapper.py` |
+| `--canthyd_db` | – | CANT-HYD HMM file (`CANT-HYD.hmm`); enables the search for hydrocarbon degradation marker genes |
+| `--hadeg_db` | – | HADEG repository directory (cloned from GitHub); enables the search for aerobic hydrocarbon degradation, plastic degradation and biosurfactant genes |
+| `--hadeg_identity` | `50` | Minimum identity (%) of a HADEG hit |
+| `--hadeg_coverage` | `70` | Minimum coverage (%) of both the query and the HADEG protein |
 | `--email` | – | Address that receives a summary (status, error, run information) when the run ends, sent with the `mail` command of the machine running Nextflow |
 
 ## Output
@@ -193,7 +200,9 @@ results/
 │   └── dereplication/  # representatives/ and dereplication_clusters.tsv (with --dereplicate)
 ├── 06_taxonomy/    # GTDB-Tk classification (with --gtdbtk_db)
 ├── 07_function/    # ko_per_mag.tsv, annotation_stats.tsv (with --eggnog_db)
-│   └── genes/      # protein sequences and gene counts per MAG
+│   │               # hydrocarbon_per_mag.tsv (with --canthyd_db or --hadeg_db)
+│   ├── genes/      # protein sequences and gene counts per MAG
+│   └── hydrocarbons/  # CANT-HYD and HADEG hits, one row per protein
 └── run_info.txt    # pipeline version, command line, parameters and database dates
 ```
 
@@ -288,6 +297,36 @@ KEGG orthologue, and `annotation_stats.tsv`, with genes, annotated genes and
 distinct KOs per MAG. eggNOG-mapper only reports the genes it could annotate, so
 the total gene count comes from Prodigal: the annotated fraction is a real
 number, not 100% by construction.
+
+## Hydrocarbon degradation genes
+
+Two curated databases look for the genes that let a MAG degrade hydrocarbons,
+on the proteins Prodigal predicts (the same ones eggNOG-mapper annotates):
+
+- [CANT-HYD](https://github.com/dgittins/CANT-HYD-HydrocarbonBiodegradation)
+  ([Khot et al. 2022](https://doi.org/10.3389/fmicb.2021.764058)): 37 HMMs of
+  marker genes of aerobic and anaerobic degradation (alkane monooxygenases,
+  aromatic dioxygenases, fumarate-adding enzymes such as AssA and BssA, ...).
+  `hmmsearch --cut_tc` keeps only hits above each model's trusted cutoff; a
+  protein that passes several models keeps the best one.
+- [HADEG](https://github.com/jarojasva/HADEG)
+  ([Rojas-Vargas et al. 2023](https://pubmed.ncbi.nlm.nih.gov/37778093/)):
+  experimentally validated proteins of aerobic hydrocarbon degradation, plastic
+  degradation and biosurfactant production, each assigned to a compound,
+  pathway and gene. Proteins are searched with DIAMOND; a hit needs
+  `--hadeg_identity` (50 %, the authors' threshold) and `--hadeg_coverage`
+  (70 %) of both proteins, and each protein keeps its best hit. The HADEG
+  authors use Proteinortho instead, which also requires reciprocal hits.
+
+`07_function/hydrocarbons/` has one row per protein and database;
+`07_function/hydrocarbon_per_mag.tsv` counts the genes of each MAG by database,
+marker and pathway. HADEG includes auxiliary genes (rubredoxins, alkyl
+hydroperoxide reductases, ...) that are common outside hydrocarbon degraders,
+so pathways are better judged by their key enzymes than by any single hit.
+
+Pass the HMM file to `--canthyd_db` and the cloned HADEG repository to
+`--hadeg_db`; the newest `HADEG_protein_database_*.faa` in it is used, and its
+name is printed in the task log.
 
 ## Traceability
 
