@@ -19,7 +19,9 @@ if [ "${#summaries[@]}" -eq 0 ]; then
     exit 0
 fi
 
+# GTDB-Tk 2.x writes the same summary in the output directory and in
+# classify/: keep each genome once
 head -n 1 "${summaries[0]}"
 for f in "${summaries[@]}"; do
     tail -n +2 "$f"
-done
+done | awk -F '\t' '!seen[$1]++'

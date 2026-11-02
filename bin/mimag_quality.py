@@ -11,9 +11,10 @@ enough tRNAs is medium. The column `limiting` says what keeps each genome below
 high quality.
 
 rRNA and tRNA genes are searched with both the bacterial and the archaeal
-models. The domain comes from GTDB-Tk when its classification is given;
-otherwise the model that finds more rRNA types, then more tRNA types, is kept
-(bacterial on ties).
+models. The domain comes from GTDB-Tk when its classification is given.
+Without it, genomes are taken as bacterial unless the archaeal models find
+more rRNA types: tRNA counts alone are not used, because the archaeal tRNA
+model often finds more tRNA types in bacterial genomes.
 
 One row per genome in the rRNA tables, which only list the genomes that were
 searched (the dereplicated representatives with --dereplicate).
@@ -109,20 +110,17 @@ def main():
         classification, closest = taxonomy.get(genome, ("", "NA"))
         domain_tag = classification.split(";")[0] if classification else ""
 
-        def score(model):
+        def rrna_types(model):
             r = rrna[genome].get(model, {})
-            t = trna.get(genome, {}).get(model, {})
-            rrna_types = sum(1 for k in RRNA_TYPES if int(r.get("rrna_" + k, 0)) > 0)
-            return (rrna_types, int(t.get("trna_types", 0)),
-                    sum(int(r.get("rrna_" + k, 0)) for k in RRNA_TYPES), int(t.get("trna_total", 0)))
+            return sum(1 for k in RRNA_TYPES if int(r.get("rrna_" + k, 0)) > 0)
 
         if domain_tag == "d__Archaea":
             model, source = "arc", "gtdbtk"
         elif domain_tag == "d__Bacteria":
             model, source = "bac", "gtdbtk"
         else:
-            # max() keeps the first of equal scores: bacterial on ties
-            model, source = max(("bac", "arc"), key=score), "rrna_trna"
+            model = "arc" if rrna_types("arc") > rrna_types("bac") else "bac"
+            source = "rrna"
 
         r = rrna[genome].get(model, {})
         t = trna.get(genome, {}).get(model, {"trna_types": "0", "trna_total": "0", "trna_missing": "NA"})

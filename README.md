@@ -278,8 +278,11 @@ fewer high-quality genomes here than in `mag_quality.tsv`.
 
 The genomes have no taxonomy when these steps run, so both tools search with
 their bacterial and archaeal models. The domain comes from GTDB-Tk when
-`--gtdbtk_db` is used (`domain_source` = `gtdbtk`); otherwise the model that
-finds more rRNA types, then more tRNA types, is kept (`rrna_trna`). barrnap
+`--gtdbtk_db` is used (`domain_source` = `gtdbtk`). Without it, genomes are
+taken as bacterial unless the archaeal models find more rRNA types
+(`domain_source` = `rrna`); tRNA counts are not used for this, because the
+archaeal tRNA model often finds more tRNA types in bacteria. Use GTDB-Tk when
+the domain matters. barrnap
 genes shorter than the full model still count, and are reported in
 `rrna_partial`. The table also carries size, N50, GC, CheckM2, GUNC and GTDB-Tk
 columns, so it can be submitted as it is.
