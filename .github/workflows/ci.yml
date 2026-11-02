@@ -29,3 +29,11 @@ jobs:
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --gunc_db assets/NO_FILE --gunc_exclude --gtdbtk_db assets/NO_FILE --mimag --outdir results_mimag
       - name: Stub run (hydrocarbon degradation genes with CANT-HYD and HADEG)
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --canthyd_db assets/NO_FILE --hadeg_db assets/NO_FILE --outdir results_hydrocarbons
+      - name: Stub run (contig branch: gene catalog, function, CAT taxonomy and SingleM, no binning)
+        run: nextflow run . -profile test -stub-run --workflow contigs --eggnog_db assets/NO_FILE --canthyd_db assets/NO_FILE --hadeg_db assets/NO_FILE --cat_db assets/NO_FILE --singlem_db assets/NO_FILE --outdir results_contigs
+      - name: Stub run (MAGs and contigs on the same co-assemblies)
+        run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --workflow both --canthyd_db assets/NO_FILE --cat_db assets/NO_FILE --outdir results_both
+      - name: Unit test (gene depth averaged across assemblies, profiles)
+        run: |
+          pip install numpy pandas
+          bash tests/test_contig_scripts.sh
