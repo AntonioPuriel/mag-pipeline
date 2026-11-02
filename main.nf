@@ -30,12 +30,44 @@ include { CANTHYD             } from './modules/canthyd'
 include { HADEG               } from './modules/hadeg'
 include { HYDROCARBON_SUMMARY } from './modules/hydrocarbon_summary'
 
+// Contig branch (--workflow contigs or both)
+include { PRODIGAL_CONTIGS             } from './modules/prodigal_contigs'
+include { GENE_CATALOG; SPLIT_CATALOG  } from './modules/gene_catalog'
+include { GENE_ABUNDANCE               } from './modules/gene_abundance'
+include { CAT_CONTIGS                  } from './modules/cat_contigs'
+include { CONTIG_PROFILES              } from './modules/contig_profiles'
+include { EGGNOG_MAPPER as EGGNOG_GENES } from './modules/eggnog_mapper'
+include { CANTHYD as CANTHYD_GENES     } from './modules/canthyd'
+include { HADEG as HADEG_GENES         } from './modules/hadeg'
+
+// Read-based taxonomic profile, independent of assembly
+include { SINGLEM; SINGLEM_SUMMARY     } from './modules/singlem'
+
 workflow {
 
     // ---- Parameter checks ----
     if (!params.input) {
         error "Please provide a samplesheet with --input"
     }
+    if (!(params.workflow in ['mags', 'contigs', 'both'])) {
+        error "--workflow must be 'mags', 'contigs' or 'both' (got '${params.workflow}')"
+    }
+    // mags: genomes from binning; contigs: gene catalog of all filtered
+    // contigs, without binning; both: the two branches on the same assemblies
+    def run_mags    = params.workflow in ['mags', 'both']
+    def run_contigs = params.workflow in ['contigs', 'both']
+
+    if (!run_mags) {
+        def ignored = ['refine', 'dereplicate', 'mimag', 'gunc_exclude'].findAll { params[it] } +
+                      ['gtdbtk_db', 'gunc_db'].findAll { params[it] }
+        if (ignored) {
+            log.warn "--workflow contigs: ${ignored.collect { '--' + it }.join(', ')} only act on MAGs and are ignored"
+        }
+    }
+    if (params.cat_db && !run_contigs) {
+        log.warn "--cat_db classifies contigs: it is ignored unless --workflow is 'contigs' or 'both'"
+    }
+
     if (!(params.assembly_mode in ['coassembly', 'group', 'per_sample'])) {
         error "--assembly_mode must be 'coassembly', 'group' or 'per_sample' (got '${params.assembly_mode}'). See docs/assembly_strategies.md"
     }
@@ -72,7 +104,7 @@ workflow {
     if (params.refine && binners.size() < 2) {
         log.warn "--refine with a single binner: DAS_Tool will only filter bins, not combine binners"
     }
-    if (!params.skip_checkm2 && !params.checkm2_db && !workflow.stubRun) {
+    if (run_mags && !params.skip_checkm2 && !params.checkm2_db && !workflow.stubRun) {
         error "Please provide the CheckM2 database with --checkm2_db, or skip MAG quality assessment with --skip_checkm2"
     }
 
@@ -131,7 +163,7 @@ workflow {
 
     // CONCOCT needs its 10 kb pieces before mapping, to compute its coverage
     // while each BAM still exists
-    if ('concoct' in binners) {
+    if (run_mags && 'concoct' in binners) {
         CONCOCT_CUTUP(FILTER_CONTIGS.out.contigs)
         beds = CONCOCT_CUTUP.out.cutup.map { id, fa, bed -> tuple(id, bed) }
     } else {
@@ -196,158 +228,236 @@ workflow {
     )
     depth_ch = MERGE_DEPTHS.out.depth
 
-    // ---- Binning ----
-    bins_ch = channel.empty()
+    // ================================================================
+    // MAG branch (--workflow mags or both)
+    // ================================================================
+    if (run_mags) {
+        // ---- Binning ----
+        bins_ch = channel.empty()
 
-    if ('metabat2' in binners) {
-        METABAT2(FILTER_CONTIGS.out.contigs.join(depth_ch))
-        bins_ch = bins_ch.mix(METABAT2.out.bins)
-    }
+        if ('metabat2' in binners) {
+            METABAT2(FILTER_CONTIGS.out.contigs.join(depth_ch))
+            bins_ch = bins_ch.mix(METABAT2.out.bins)
+        }
 
-    if ('concoct' in binners) {
-        MERGE_CONCOCT_COV(
-            MAP_DEPTH.out.concoct_cov
-                .map { id, sample, cov -> tuple(id, cov) }
-                .combine(n_expected, by: 0)
-                .map { id, cov, n -> tuple(groupKey(id, n), cov) }
-                .groupTuple(sort: true)
-                .map { key, covs -> tuple(key.getGroupTarget(), covs) }
-        )
-        // id, contigs, cutup_fa, coverage
-        CONCOCT(
-            FILTER_CONTIGS.out.contigs
-                .join(CONCOCT_CUTUP.out.cutup.map { id, fa, bed -> tuple(id, fa) })
-                .join(MERGE_CONCOCT_COV.out.coverage)
-        )
-        bins_ch = bins_ch.mix(CONCOCT.out.bins)
-    }
-
-    // ---- Bin refinement (optional) ----
-    if (params.refine) {
-        dastool_input = FILTER_CONTIGS.out.contigs
-            .join(bins_ch.map { id, binner, dir -> tuple(id, dir) }.groupTuple(size: binners.size()))
-
-        DAS_TOOL(dastool_input)
-        final_bins = DAS_TOOL.out.bins
-        all_bins   = bins_ch.mix(DAS_TOOL.out.bins)
-    } else {
-        final_bins = bins_ch
-        all_bins   = bins_ch
-    }
-
-    BIN_SUMMARY(all_bins.map { id, binner, dir -> dir }.collect())
-
-    // Contig-to-bin map and coverage of every MAG in every sample, the input
-    // for abundance figures downstream
-    MAG_ABUNDANCE(
-        all_bins.map { id, binner, dir -> dir }.collect(),
-        depth_ch.map { id, depth -> depth }.collect()
-    )
-
-    // Bins passed to taxonomy and annotation: all final bins, or only the
-    // dereplicated representatives with --dereplicate
-    annotation_bins = final_bins
-
-    // ---- Chimera check (optional, needs the GUNC database) ----
-    // Runs per assembly, next to CheckM2; it flags chimeric genomes but does
-    // not change any bin
-    gunc_reports = channel.empty()
-    if (params.gunc_db) {
-        gunc_db = file(params.gunc_db, checkIfExists: !workflow.stubRun)
-        GUNC(final_bins, gunc_db)
-        gunc_reports = GUNC.out.report.map { id, binner, report -> report }
-    }
-
-    // ---- MAG quality ----
-    if (!params.skip_checkm2) {
-        checkm2_db = params.checkm2_db
-            ? file(params.checkm2_db, checkIfExists: !workflow.stubRun)
-            : file("${projectDir}/assets/NO_FILE")
-
-        CHECKM2(final_bins, checkm2_db)
-        checkm2_reports = CHECKM2.out.report.map { id, binner, report -> report }
-        reports = checkm2_reports
-
-        // ---- Dereplication (optional): one representative per cluster ----
-        // Runs once, when the bins and CheckM2 reports of every assembly are ready
-        if (params.dereplicate) {
-            GALAH(
-                final_bins.map { id, binner, dir -> dir }.collect(),
-                reports.collect(),
-                params.gunc_db ? gunc_reports.collect() : file("${projectDir}/assets/NO_FILE")
+        if ('concoct' in binners) {
+            MERGE_CONCOCT_COV(
+                MAP_DEPTH.out.concoct_cov
+                    .map { id, sample, cov -> tuple(id, cov) }
+                    .combine(n_expected, by: 0)
+                    .map { id, cov, n -> tuple(groupKey(id, n), cov) }
+                    .groupTuple(sort: true)
+                    .map { key, covs -> tuple(key.getGroupTarget(), covs) }
             )
-            annotation_bins = GALAH.out.representatives
-                .map { dir -> tuple('dereplicated', 'galah', dir) }
+            // id, contigs, cutup_fa, coverage
+            CONCOCT(
+                FILTER_CONTIGS.out.contigs
+                    .join(CONCOCT_CUTUP.out.cutup.map { id, fa, bed -> tuple(id, fa) })
+                    .join(MERGE_CONCOCT_COV.out.coverage)
+            )
+            bins_ch = bins_ch.mix(CONCOCT.out.bins)
         }
 
-        // ---- Taxonomy (optional, needs the GTDB-Tk reference data) ----
-        gtdbtk_reports = channel.empty()
-        if (params.gtdbtk_db) {
-            gtdbtk_db = file(params.gtdbtk_db, checkIfExists: !workflow.stubRun)
-            GTDB_TK(annotation_bins, gtdbtk_db)
-            gtdbtk_reports = GTDB_TK.out.summary.map { id, binner, summary -> summary }
-            reports = reports.mix(gtdbtk_reports)
+        // ---- Bin refinement (optional) ----
+        if (params.refine) {
+            dastool_input = FILTER_CONTIGS.out.contigs
+                .join(bins_ch.map { id, binner, dir -> tuple(id, dir) }.groupTuple(size: binners.size()))
+
+            DAS_TOOL(dastool_input)
+            final_bins = DAS_TOOL.out.bins
+            all_bins   = bins_ch.mix(DAS_TOOL.out.bins)
+        } else {
+            final_bins = bins_ch
+            all_bins   = bins_ch
         }
 
-        // ---- MIMAG standard (optional): rRNA and tRNA genes ----
-        // Run on the same genomes as taxonomy: the dereplicated representatives
-        // with --dereplicate. They only add steps after galah, so they can be
-        // added to a finished run with -resume
-        if (params.mimag) {
-            BARRNAP(annotation_bins)
-            TRNASCAN(annotation_bins)
+        BIN_SUMMARY(all_bins.map { id, binner, dir -> dir }.collect())
+
+        // Contig-to-bin map and coverage of every MAG in every sample, the input
+        // for abundance figures downstream
+        MAG_ABUNDANCE(
+            all_bins.map { id, binner, dir -> dir }.collect(),
+            depth_ch.map { id, depth -> depth }.collect()
+        )
+
+        // Bins passed to taxonomy and annotation: all final bins, or only the
+        // dereplicated representatives with --dereplicate
+        annotation_bins = final_bins
+
+        // ---- Chimera check (optional, needs the GUNC database) ----
+        // Runs per assembly, next to CheckM2; it flags chimeric genomes but does
+        // not change any bin
+        gunc_reports = channel.empty()
+        if (params.gunc_db) {
+            gunc_db = file(params.gunc_db, checkIfExists: !workflow.stubRun)
+            GUNC(final_bins, gunc_db)
+            gunc_reports = GUNC.out.report.map { id, binner, report -> report }
+        }
+
+        // ---- MAG quality ----
+        if (!params.skip_checkm2) {
+            checkm2_db = params.checkm2_db
+                ? file(params.checkm2_db, checkIfExists: !workflow.stubRun)
+                : file("${projectDir}/assets/NO_FILE")
+
+            CHECKM2(final_bins, checkm2_db)
+            checkm2_reports = CHECKM2.out.report.map { id, binner, report -> report }
+            reports = checkm2_reports
+
+            // ---- Dereplication (optional): one representative per cluster ----
+            // Runs once, when the bins and CheckM2 reports of every assembly are ready
+            if (params.dereplicate) {
+                GALAH(
+                    final_bins.map { id, binner, dir -> dir }.collect(),
+                    reports.collect(),
+                    params.gunc_db ? gunc_reports.collect() : file("${projectDir}/assets/NO_FILE")
+                )
+                annotation_bins = GALAH.out.representatives
+                    .map { dir -> tuple('dereplicated', 'galah', dir) }
+            }
+
+            // ---- Taxonomy (optional, needs the GTDB-Tk reference data) ----
+            gtdbtk_reports = channel.empty()
+            if (params.gtdbtk_db) {
+                gtdbtk_db = file(params.gtdbtk_db, checkIfExists: !workflow.stubRun)
+                GTDB_TK(annotation_bins, gtdbtk_db)
+                gtdbtk_reports = GTDB_TK.out.summary.map { id, binner, summary -> summary }
+                reports = reports.mix(gtdbtk_reports)
+            }
+
+            // ---- MIMAG standard (optional): rRNA and tRNA genes ----
+            // Run on the same genomes as taxonomy: the dereplicated representatives
+            // with --dereplicate. They only add steps after galah, so they can be
+            // added to a finished run with -resume
+            if (params.mimag) {
+                BARRNAP(annotation_bins)
+                TRNASCAN(annotation_bins)
+                no_file = file("${projectDir}/assets/NO_FILE")
+                MIMAG_QUALITY(
+                    BIN_SUMMARY.out.tsv,
+                    checkm2_reports.collect(),
+                    BARRNAP.out.summary.map { id, binner, tsv -> tsv }.collect(),
+                    TRNASCAN.out.summary.map { id, binner, tsv -> tsv }.collect(),
+                    params.gunc_db   ? gunc_reports.collect()   : no_file,
+                    params.gtdbtk_db ? gtdbtk_reports.collect() : no_file
+                )
+            }
+
+            MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.mix(gunc_reports).collect())
+        }
+        else if (params.gtdbtk_db) {
+            log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"
+        }
+
+        // ---- Gene calling: for eggNOG and the hydrocarbon databases ----
+        if (params.eggnog_db || params.canthyd_db || params.hadeg_db) {
+            PRODIGAL(annotation_bins)
+        }
+
+        // ---- Functional annotation (optional, needs the eggNOG database) ----
+        if (params.eggnog_db) {
+            eggnog_db = file(params.eggnog_db, checkIfExists: !workflow.stubRun)
+
+            EGGNOG_MAPPER(PRODIGAL.out.proteins, eggnog_db)
+            FUNCTIONAL_SUMMARY(
+                EGGNOG_MAPPER.out.annotations.map { id, binner, ann -> ann }.collect(),
+                PRODIGAL.out.counts.collect()
+            )
+        }
+
+        // ---- Hydrocarbon degradation genes (optional) ----
+        // CANT-HYD: HMMs of aerobic and anaerobic marker genes (trusted cutoffs)
+        // HADEG: experimentally validated aerobic degradation proteins, by pathway
+        if (params.canthyd_db || params.hadeg_db) {
             no_file = file("${projectDir}/assets/NO_FILE")
-            MIMAG_QUALITY(
-                BIN_SUMMARY.out.tsv,
-                checkm2_reports.collect(),
-                BARRNAP.out.summary.map { id, binner, tsv -> tsv }.collect(),
-                TRNASCAN.out.summary.map { id, binner, tsv -> tsv }.collect(),
-                params.gunc_db   ? gunc_reports.collect()   : no_file,
-                params.gtdbtk_db ? gtdbtk_reports.collect() : no_file
-            )
+            canthyd_hits = no_file
+            hadeg_hits   = no_file
+
+            if (params.canthyd_db) {
+                canthyd_hmm = file(params.canthyd_db, checkIfExists: !workflow.stubRun)
+                CANTHYD(PRODIGAL.out.proteins, canthyd_hmm)
+                canthyd_hits = CANTHYD.out.hits.map { id, binner, tsv -> tsv }.collect()
+            }
+            if (params.hadeg_db) {
+                hadeg_dir = file(params.hadeg_db, checkIfExists: !workflow.stubRun)
+                HADEG(PRODIGAL.out.proteins, hadeg_dir)
+                hadeg_hits = HADEG.out.hits.map { id, binner, tsv -> tsv }.collect()
+            }
+
+            HYDROCARBON_SUMMARY(canthyd_hits, hadeg_hits)
         }
-
-        MAG_QUALITY(BIN_SUMMARY.out.tsv, reports.mix(gunc_reports).collect())
-    }
-    else if (params.gtdbtk_db) {
-        log.warn "--gtdbtk_db is ignored when --skip_checkm2 is set"
     }
 
-    // ---- Gene calling: for eggNOG and the hydrocarbon databases ----
-    if (params.eggnog_db || params.canthyd_db || params.hadeg_db) {
-        PRODIGAL(annotation_bins)
-    }
+    // ================================================================
+    // Contig branch (--workflow contigs or both): the whole community,
+    // without reconstructing genomes
+    // ================================================================
+    if (run_contigs) {
 
-    // ---- Functional annotation (optional, needs the eggNOG database) ----
-    if (params.eggnog_db) {
-        eggnog_db = file(params.eggnog_db, checkIfExists: !workflow.stubRun)
+        // ---- Genes of every filtered contig ----
+        PRODIGAL_CONTIGS(FILTER_CONTIGS.out.contigs)
 
-        EGGNOG_MAPPER(PRODIGAL.out.proteins, eggnog_db)
-        FUNCTIONAL_SUMMARY(
-            EGGNOG_MAPPER.out.annotations.map { id, binner, ann -> ann }.collect(),
-            PRODIGAL.out.counts.collect()
+        // ---- Non-redundant gene catalog of all assemblies ----
+        GENE_CATALOG(
+            PRODIGAL_CONTIGS.out.genes.map { id, faa, fna -> fna }.collect(),
+            PRODIGAL_CONTIGS.out.genes.map { id, faa, fna -> faa }.collect()
         )
+
+        // ---- Abundance: each gene takes the depth of its contig ----
+        // The depth tables are those of binning: no new mapping
+        GENE_ABUNDANCE(
+            GENE_CATALOG.out.clusters,
+            depth_ch.map { id, depth -> depth }.collect()
+        )
+
+        // ---- Function of the catalog genes, in pieces ----
+        no_file      = file("${projectDir}/assets/NO_FILE")
+        eggnog_genes = no_file
+        canthyd_genes = no_file
+        hadeg_genes  = no_file
+
+        if (params.eggnog_db || params.canthyd_db || params.hadeg_db) {
+            SPLIT_CATALOG(GENE_CATALOG.out.proteins)
+            // id 'catalog', piece 'chunkNNN': outputs are named catalog_chunkNNN.*
+            catalog_chunks = SPLIT_CATALOG.out.chunks
+                .flatten()
+                .map { f -> tuple('catalog', f.baseName.tokenize('_')[1], f) }
+
+            if (params.eggnog_db) {
+                EGGNOG_GENES(catalog_chunks, file(params.eggnog_db, checkIfExists: !workflow.stubRun))
+                eggnog_genes = EGGNOG_GENES.out.annotations.map { id, chunk, ann -> ann }.collect()
+            }
+            if (params.canthyd_db) {
+                CANTHYD_GENES(catalog_chunks, file(params.canthyd_db, checkIfExists: !workflow.stubRun))
+                canthyd_genes = CANTHYD_GENES.out.hits.map { id, chunk, tsv -> tsv }.collect()
+            }
+            if (params.hadeg_db) {
+                HADEG_GENES(catalog_chunks, file(params.hadeg_db, checkIfExists: !workflow.stubRun))
+                hadeg_genes = HADEG_GENES.out.hits.map { id, chunk, tsv -> tsv }.collect()
+            }
+        }
+
+        // ---- Taxonomy of every contig (optional, needs the CAT database) ----
+        cat_tables = no_file
+        if (params.cat_db) {
+            CAT_CONTIGS(
+                FILTER_CONTIGS.out.contigs.join(PRODIGAL_CONTIGS.out.genes.map { id, faa, fna -> tuple(id, faa) }),
+                file(params.cat_db, checkIfExists: !workflow.stubRun)
+            )
+            cat_tables = CAT_CONTIGS.out.classification.map { id, tsv -> tsv }.collect()
+        }
+
+        // ---- KO, hydrocarbon marker and taxon x sample tables ----
+        CONTIG_PROFILES(GENE_ABUNDANCE.out.tpm, eggnog_genes, canthyd_genes, hadeg_genes, cat_tables)
     }
 
-    // ---- Hydrocarbon degradation genes (optional) ----
-    // CANT-HYD: HMMs of aerobic and anaerobic marker genes (trusted cutoffs)
-    // HADEG: experimentally validated aerobic degradation proteins, by pathway
-    if (params.canthyd_db || params.hadeg_db) {
-        no_file = file("${projectDir}/assets/NO_FILE")
-        canthyd_hits = no_file
-        hadeg_hits   = no_file
-
-        if (params.canthyd_db) {
-            canthyd_hmm = file(params.canthyd_db, checkIfExists: !workflow.stubRun)
-            CANTHYD(PRODIGAL.out.proteins, canthyd_hmm)
-            canthyd_hits = CANTHYD.out.hits.map { id, binner, tsv -> tsv }.collect()
-        }
-        if (params.hadeg_db) {
-            hadeg_dir = file(params.hadeg_db, checkIfExists: !workflow.stubRun)
-            HADEG(PRODIGAL.out.proteins, hadeg_dir)
-            hadeg_hits = HADEG.out.hits.map { id, binner, tsv -> tsv }.collect()
-        }
-
-        HYDROCARBON_SUMMARY(canthyd_hits, hadeg_hits)
+    // ---- Read-based taxonomic profile (optional, needs the SingleM metapackage) ----
+    // Independent of the assembly: runs with any --workflow
+    if (params.singlem_db) {
+        SINGLEM(
+            trimmed.map { sample, r1, r2, group -> tuple(sample, r1, r2) },
+            file(params.singlem_db, checkIfExists: !workflow.stubRun)
+        )
+        SINGLEM_SUMMARY(SINGLEM.out.profile.collect())
     }
 }

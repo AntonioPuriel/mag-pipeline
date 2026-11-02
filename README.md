@@ -21,6 +21,8 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | Hydrocarbon degradation genes (optional) | CANT-HYD (HMMER), HADEG (DIAMOND) | ✅ |
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
+| Contig branch: gene catalog, function, taxonomy and abundance per sample, without binning (`--workflow contigs` or `both`) | Prodigal, MMseqs2, CAT, eggNOG-mapper, CANT-HYD, HADEG | ✅ |
+| Read-based taxonomic profile (optional) | SingleM | ✅ |
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "8px"}}}%%
@@ -42,6 +44,14 @@ flowchart TB
     G --> MI["barrnap + tRNAscan-SE<br/>rRNA and tRNA genes"]
     P --> HC["CANT-HYD + HADEG<br/>hydrocarbon degradation genes"]
     T --> Y["Phylogenomic tree<br/>GTDB-Tk marker alignment + FastTree"]
+    F --> CG["Prodigal -p meta + MMseqs2<br/>gene catalog of all contigs<br/>(--workflow contigs or both)"]
+    CG --> CF["eggNOG · CANT-HYD · HADEG<br/>CAT contig taxonomy"]
+    M -- depths --> CA["Gene depth and TPM<br/>per sample"]
+    CG --> CA
+    Q --> SM["SingleM<br/>read-based profile"]
+    CF -. KO / marker / taxon x sample .-> O
+    CA -.-> O
+    SM -. profiles .-> O
 
     M -- depths --> O
     K -- quality --> O
@@ -55,7 +65,7 @@ flowchart TB
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
-    class Q,D,U,G,T,P,MI,HC opt
+    class Q,D,U,G,T,P,MI,HC,CG,CF,CA,SM opt
     class Y planned
 ```
 
@@ -136,6 +146,16 @@ sampleA,/path/sampleA_R1.fastq.gz,/path/sampleA_R2.fastq.gz
 sampleB,/path/sampleB_R1.fastq.gz,/path/sampleB_R2.fastq.gz
 ```
 
+## MAGs, contigs or both
+
+`--workflow mags` (default) recovers genomes. `--workflow contigs` skips
+binning and describes the whole community from a non-redundant catalog of the
+genes on every filtered contig: function, taxonomy (CAT) and TPM per sample,
+taken from the same depth tables as binning. `--workflow both` runs the two.
+MAGs miss what does not assemble into genomes (rare, very diverse or
+poorly-covered organisms); the contig branch and SingleM cover it. See
+[docs/contig_branch.md](docs/contig_branch.md).
+
 ## Choosing an assembly strategy
 
 Pooling all samples, pooling them by group, or assembling each sample alone
@@ -177,6 +197,15 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--hadeg_db` | – | HADEG repository directory (cloned from GitHub); enables the search for aerobic hydrocarbon degradation, plastic degradation and biosurfactant genes |
 | `--hadeg_identity` | `50` | Minimum identity (%) of a HADEG hit |
 | `--hadeg_coverage` | `70` | Minimum coverage (%) of both the query and the HADEG protein |
+| `--workflow` | `mags` | `mags`, `contigs` or `both`; see [contig branch](docs/contig_branch.md) |
+| `--catalog_min_gene_length` | `100` | Genes shorter than this (nt) are left out of the gene catalog |
+| `--catalog_min_id` | `0.95` | Nucleotide identity that joins two genes in the catalog |
+| `--catalog_min_cov` | `0.9` | Fraction of each member covered by its representative |
+| `--catalog_chunk_size` | `1000000` | Catalog proteins per eggNOG-mapper, CANT-HYD and HADEG job |
+| `--cat_db` | – | CAT database folder (from `CAT_pack prepare`, with `db/` and `tax/`); enables contig taxonomy |
+| `--cat_block_size` | `12` | DIAMOND `--block-size` in CAT; lower uses less memory and disk |
+| `--cat_index_chunks` | `1` | DIAMOND `--index-chunks` in CAT; higher uses less memory |
+| `--singlem_db` | – | SingleM metapackage folder (from `singlem data`); enables a read-based profile of every sample |
 | `--email` | – | Address that receives a summary (status, error, run information) when the run ends, sent with the `mail` command of the machine running Nextflow |
 
 ## Output
@@ -203,6 +232,10 @@ results/
 │   │               # hydrocarbon_per_mag.tsv (with --canthyd_db or --hadeg_db)
 │   ├── genes/      # protein sequences and gene counts per MAG
 │   └── hydrocarbons/  # CANT-HYD and HADEG hits, one row per protein
+├── 08_contigs/     # gene catalog, its annotation and abundance (with --workflow contigs or both)
+│   ├── genes/ catalog/ abundance/ function/ taxonomy/
+│   └── profiles/   # KO, hydrocarbon marker and taxon x sample tables
+├── 09_singlem/     # SingleM profile of every sample (with --singlem_db)
 └── run_info.txt    # pipeline version, command line, parameters and database dates
 ```
 
