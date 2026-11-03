@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use mag-pipeline, please cite it as below."
+title: "mag-pipeline: a Nextflow workflow for genome-resolved metagenomics"
+type: software
+authors:
+  - family-names: "Puriel Hernández"
+    given-names: "Antonio"
+    email: "apurielh@gmail.com"
+    orcid: "https://orcid.org/0009-0000-7631-1102"
+    affiliation: "Université de Pau et des Pays de l'Adour"
+repository-code: "https://github.com/AntonioPuriel/mag-pipeline"
+license: MIT
+version: "1.9.1"
+keywords:
+  - metagenomics
+  - metagenome-assembled genomes
+  - MAG
+  - Nextflow
+  - binning
+  - MIMAG
+  - hydrocarbon degradation
