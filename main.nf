@@ -29,6 +29,7 @@ include { MIMAG_QUALITY      } from './modules/mimag_quality'
 include { CANTHYD             } from './modules/canthyd'
 include { HADEG               } from './modules/hadeg'
 include { HYDROCARBON_SUMMARY } from './modules/hydrocarbon_summary'
+include { MAG_TREE            } from './modules/mag_tree'
 
 // Contig branch (--workflow contigs or both)
 include { PRODIGAL_CONTIGS             } from './modules/prodigal_contigs'
@@ -85,6 +86,9 @@ workflow {
     }
     if (params.dereplicate && params.skip_checkm2) {
         error "--dereplicate needs CheckM2 to choose the best genome of each cluster: remove --skip_checkm2"
+    }
+    if (params.mag_tree && !params.gtdbtk_db) {
+        error "--mag_tree needs --gtdbtk_db: the tree is built from the GTDB-Tk marker genes"
     }
     if (params.mimag && params.skip_checkm2) {
         error "--mimag needs CheckM2 completeness and contamination: remove --skip_checkm2"
@@ -323,6 +327,13 @@ workflow {
                 GTDB_TK(annotation_bins, gtdbtk_db)
                 gtdbtk_reports = GTDB_TK.out.summary.map { id, binner, summary -> summary }
                 reports = reports.mix(gtdbtk_reports)
+
+                // ---- De novo tree of every final genome (optional) ----
+                // GTDB-Tk does not align the genomes it assigns by ANI, so its
+                // own trees miss them: identify + align --skip_gtdb_refs + infer
+                if (params.mag_tree) {
+                    MAG_TREE(annotation_bins.map { id, binner, dir -> dir }.collect(), gtdbtk_db)
+                }
             }
 
             // ---- MIMAG standard (optional): rRNA and tRNA genes ----

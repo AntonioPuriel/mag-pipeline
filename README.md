@@ -20,6 +20,7 @@ From raw paired-end reads to quality-assessed MAGs. Every step has been tested o
 | rRNA and tRNA genes, MIMAG category (optional) | barrnap, tRNAscan-SE | ✅ |
 | Hydrocarbon degradation genes (optional) | CANT-HYD (HMMER), HADEG (DIAMOND) | ✅ |
 | Taxonomic classification (optional) | GTDB-Tk | ✅ |
+| De novo phylogenomic tree of the final genomes (optional, `--mag_tree`) | GTDB-Tk identify/align, FastTree | ✅ |
 | Functional annotation (optional) | Prodigal, eggNOG-mapper | ✅ |
 | Contig branch: gene catalog, function, taxonomy and abundance per sample, without binning (`--workflow contigs` or `both`) | Prodigal, MMseqs2, CAT, eggNOG-mapper, CANT-HYD, HADEG | ✅ |
 | Read-based taxonomic profile (optional) | SingleM | ✅ |
@@ -43,7 +44,7 @@ flowchart TB
     G --> P["Prodigal + eggNOG-mapper<br/>function"]
     G --> MI["barrnap + tRNAscan-SE<br/>rRNA and tRNA genes"]
     P --> HC["CANT-HYD + HADEG<br/>hydrocarbon degradation genes"]
-    T --> Y["Phylogenomic tree<br/>GTDB-Tk marker alignment + FastTree"]
+    G --> Y["De novo tree --mag_tree<br/>GTDB-Tk markers + FastTree"]
     F --> CG["Prodigal -p meta + MMseqs2<br/>gene catalog of all contigs<br/>(--workflow contigs or both)"]
     CG --> CF["eggNOG · CANT-HYD · HADEG<br/>CAT contig taxonomy"]
     M -- depths --> CA["Gene depth and TPM<br/>per sample"]
@@ -65,13 +66,10 @@ flowchart TB
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
-    class Q,D,U,G,T,P,MI,HC,CG,CF,CA,SM opt
-    class Y planned
+    class Q,D,U,G,T,P,MI,HC,CG,CF,CA,SM,Y opt
 ```
 
-Dashed boxes are optional steps. The grey box is planned: a phylogenomic tree
-of the dereplicated genomes, built from the marker alignment GTDB-Tk already
-computes.
+Dashed boxes are optional steps.
 
 ## Designed for constrained resources
 
@@ -190,6 +188,7 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--gtdbtk_db` | – | GTDB-Tk reference data directory (enables taxonomy) |
 | `--gtdbtk_pplacer_cpus` | `1` | Threads for pplacer; more threads multiply memory use |
 | `--gtdbtk_args` | – | Extra flags for `gtdbtk classify_wf` |
+| `--mag_tree` | `false` | Build a de novo tree of the final genomes from the GTDB-Tk marker genes (needs `--gtdbtk_db`) |
 | `--eggnog_db` | – | eggNOG-mapper data directory (enables functional annotation) |
 | `--eggnog_dbmem` | `false` | Load the eggNOG database in RAM (~45 GB, much faster) |
 | `--eggnog_args` | – | Extra flags for `emapper.py` |
@@ -228,6 +227,8 @@ results/
 │   ├── mimag/      # barrnap GFF, tRNAscan-SE output and their summaries (with --mimag)
 │   └── dereplication/  # representatives/ and dereplication_clusters.tsv (with --dereplicate)
 ├── 06_taxonomy/    # GTDB-Tk classification (with --gtdbtk_db)
+│   ├── gtdbtk/<set>/   # GTDB-Tk alignments (align/) and placement trees (classify/)
+│   └── mag_tree/   # bac120.tree, its alignment and filtered genomes (with --mag_tree)
 ├── 07_function/    # ko_per_mag.tsv, annotation_stats.tsv (with --eggnog_db)
 │   │               # hydrocarbon_per_mag.tsv (with --canthyd_db or --hadeg_db)
 │   ├── genes/      # protein sequences and gene counts per MAG
@@ -374,6 +375,29 @@ that date is what makes an annotation reproducible months later.
 ## Taxonomy
 
 Taxonomic classification is optional because the GTDB-Tk reference data is ~100 GB and `pplacer` needs more than 100 GB of RAM. Pass `--gtdbtk_db /path/to/gtdb/release` to enable it; the `process_high_memory` label lets you send only this step to a large-memory partition. The resulting ranks are added to `mag_quality.tsv`, which reports `NA` when taxonomy is not run.
+
+GTDB-Tk's own alignments and placement trees are published in
+`06_taxonomy/gtdbtk/<set>/`. They do not include every genome: in GTDB-Tk 2.7,
+which has no `--skip_ani_screen`, genomes assigned to a known species by ANI
+(skani) are classified without being aligned or placed. In the Marine Honour case study, 37 of 280 bacterial
+genomes were missing from them.
+
+### De novo tree of the genomes
+
+`--mag_tree` builds a tree of every final genome (the dereplicated
+representatives with `--dereplicate`): GTDB-Tk finds its marker genes
+(`identify`), aligns them without the GTDB reference genomes (`align
+--skip_gtdb_refs`) and FastTree infers the tree (`infer`, WAG + Gamma). There
+is one tree per marker set, `bac120` for bacteria and `ar53` for archaea; a
+domain with fewer than 3 genomes gets no tree. The step does not run pplacer,
+so it needs far less memory than classification.
+
+`06_taxonomy/mag_tree/` holds `bac120.tree` (and `ar53.tree`), the alignment
+each was built from, and `<marker>.filtered.tsv` with the genomes GTDB-Tk left
+out for having too few markers. Leaves are named after the genomes, so the
+tree joins directly with `mimag_quality.tsv`, `hydrocarbon_per_mag.tsv` and
+`mag_abundance.tsv` (as `magreport::plot_mag_tree()` does). The tree is
+unrooted.
 
 ## License
 

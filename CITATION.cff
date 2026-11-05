@@ -10,7 +10,7 @@ authors:
     affiliation: "Université de Pau et des Pays de l'Adour"
 repository-code: "https://github.com/AntonioPuriel/mag-pipeline"
 license: MIT
-version: "1.9.1"
+version: "2.0.0"
 keywords:
   - metagenomics
   - metagenome-assembled genomes

@@ -2,14 +2,23 @@ process GTDB_TK {
     tag "${id} ${binner}"
     label 'process_high_memory'
     container 'quay.io/biocontainers/gtdbtk:2.4.0--pyhdfd78af_2'
-    publishDir "${params.outdir}/06_taxonomy", mode: 'copy'
+    // The GTDB-Tk alignments and trees go to 06_taxonomy/gtdbtk/<id>_<binner>/:
+    // their names are fixed by GTDB-Tk, so each bin set needs its own folder
+    publishDir "${params.outdir}/06_taxonomy", mode: 'copy',
+        saveAs: { fn -> fn.startsWith('gtdbtk_out/') ? "gtdbtk/${id}_${binner}/" + (fn - 'gtdbtk_out/') : fn }
 
     input:
     tuple val(id), val(binner), path(bins_dir)
     path db
 
+    // Only the summary is needed downstream. The alignments of the genomes
+    // GTDB-Tk placed (genomes assigned by ANI are not aligned) and its
+    // placement trees are kept for reference. Adding outputs does not change
+    // the task hash, so finished runs pick them up from the cache with -resume.
     output:
     tuple val(id), val(binner), path("${id}_${binner}.gtdbtk.tsv"), emit: summary
+    path "gtdbtk_out/align/*.user_msa.fasta*", emit: msa,   optional: true
+    path "gtdbtk_out/classify/*.tree",         emit: trees, optional: true
 
     script:
     """
