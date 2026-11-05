@@ -102,6 +102,12 @@ rank.
 ## Adding the branch to a finished MAG run
 
 `--workflow both -resume` reuses everything up to the depth tables and every
-MAG step: the MAG processes are unchanged in v2.0.0. Running `--workflow
-contigs` alone skips CONCOCT's coverage, so its mapping tasks differ from
-those of a MAG run and are repeated; use `both` to share them.
+MAG step of a v1.9 run: no MAG process changed its script, container or
+resources in v2.0.0. GTDB-Tk only gained outputs (its alignments and trees),
+which do not enter the task hash, so they are published from the finished
+task. Checked with v1.9.1 followed by v2.0.0 `--workflow both --mag_tree
+-resume` (Nextflow 26.04): all 43 earlier tasks came from the cache.
+
+Running `--workflow contigs` alone skips CONCOCT's coverage, so its mapping
+tasks differ from those of a MAG run and are repeated; use `both` to share
+them.
