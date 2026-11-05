@@ -204,7 +204,7 @@ the trade-offs and when to dereplicate. Read it before a large run.
 | `--cat_db` | – | CAT database folder (from `CAT_pack prepare`, with `db/` and `tax/`); enables contig taxonomy |
 | `--cat_block_size` | `12` | DIAMOND `--block-size` in CAT; lower uses less memory and disk |
 | `--cat_index_chunks` | `1` | DIAMOND `--index-chunks` in CAT; higher uses less memory |
-| `--singlem_db` | – | SingleM metapackage folder (from `singlem data`); enables a read-based profile of every sample |
+| `--singlem_db` | – | SingleM metapackage: the folder written by `singlem data`, or the metapackage folder inside it; enables a read-based profile of every sample |
 | `--email` | – | Address that receives a summary (status, error, run information) when the run ends, sent with the `mail` command of the machine running Nextflow |
 
 ## Output

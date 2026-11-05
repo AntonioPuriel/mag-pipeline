@@ -7,7 +7,8 @@
  * miss (in Marine Honour, almost all archaea). It is also the profile the
  * original study used to check its MAGs.
  *
- * --singlem_db is the folder written by `singlem data --output-directory`.
+ * --singlem_db is the folder written by `singlem data --output-directory`, or
+ * the metapackage folder inside it (the one with CONTENTS.json).
  */
 
 process SINGLEM {
@@ -26,7 +27,25 @@ process SINGLEM {
     script:
     """
     set -euo pipefail
-    export SINGLEM_METAPACKAGE_PATH=\$(readlink -f ${db})
+
+    # SingleM wants the folder that holds CONTENTS.json. `singlem data` puts it
+    # one level down (<dir>/S<version>.GTDB_r<release>.metapackage_<date>.smpkg.zb),
+    # so accept either folder
+    db_dir=\$(readlink -f ${db})
+    if [ -f "\$db_dir/CONTENTS.json" ]; then
+        metapackage=\$db_dir
+    else
+        shopt -s nullglob
+        found=( "\$db_dir"/*/CONTENTS.json )
+        shopt -u nullglob
+        if [ "\${#found[@]}" -ne 1 ]; then
+            echo "--singlem_db: expected one metapackage (a folder with CONTENTS.json) in \$db_dir, found \${#found[@]}" >&2
+            exit 1
+        fi
+        metapackage=\$(dirname "\${found[0]}")
+    fi
+    echo "SingleM metapackage: \$metapackage" >&2
+    export SINGLEM_METAPACKAGE_PATH=\$metapackage
 
     singlem pipe \\
         -1 ${r1} \\
