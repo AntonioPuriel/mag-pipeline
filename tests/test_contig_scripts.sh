@@ -18,7 +18,8 @@ printf "contigName\tcontigLen\ttotalAvgDepth\ts1.sorted.bam\ts1.sorted.bam-var\t
 printf "c1\t5000\t30\t10\t1\t20\t1\nc2\t3000\t6\t4\t1\t2\t1\n" >> A.depth.txt
 printf "contigName\tcontigLen\ttotalAvgDepth\ts1.sorted.bam\ts1.sorted.bam-var\ts2.sorted.bam\ts2.sorted.bam-var\n" > B.depth.txt
 printf "c1\t5000\t30\t12\t1\t18\t1\n" >> B.depth.txt
-printf "contigName\tcontigLen\ttotalAvgDepth\ts1.sorted.bam\ts1.sorted.bam-var\n" > C.depth.txt
+# C as written by other versions of jgi_summarize_bam_contig_depths: no .bam
+printf "contigName\tcontigLen\ttotalAvgDepth\ts1.sorted\ts1.sorted-var\n" > C.depth.txt
 printf "c9\t2000\t6\t6\t1\n" >> C.depth.txt
 
 printf "A|c1_1\tA|c1_1\nA|c1_1\tB|c1_1\nA|c2_1\tA|c2_1\nA|c2_1\tA|c2_2\nC|c9_1\tC|c9_1\nC|c9_1\tA|c2_3\n" > clusters.tsv
@@ -33,6 +34,7 @@ python3 "$bin/contig_profiles.py" --tpm tpm.tsv.gz --eggnog chunk001.emapper.ann
 python3 - <<'EOF'
 import pandas as pd
 d = pd.read_csv("depth.tsv.gz", sep="\t", index_col=0)
+assert list(d.columns) == ["s1", "s2"], f"sample names: {list(d.columns)}"
 expected = {"A|c1_1": (11, 19), "A|c2_1": (8, 4), "C|c9_1": (5, 2)}
 for gene, (s1, s2) in expected.items():
     got = tuple(d.loc[gene, ["s1", "s2"]])

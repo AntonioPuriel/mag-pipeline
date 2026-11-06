@@ -38,6 +38,7 @@ Usage:
 import argparse
 import gzip
 import os
+import re
 import sys
 
 import numpy as np
@@ -73,13 +74,18 @@ def read_clusters(path):
 
 
 def read_depth(path):
-    """Mean depth per contig and sample: contigName, then <sample>.sorted.bam columns."""
+    """Mean depth per contig and sample.
+
+    Columns after the first three are <sample>.sorted.bam or <sample>.sorted,
+    depending on the version of jgi_summarize_bam_contig_depths, each followed
+    by its variance (-var or .var). Sample names are cleaned as in
+    bin/mag_abundance.sh, so both tables name the samples the same way.
+    """
     header = pd.read_csv(path, sep="\t", nrows=0).columns.tolist()
-    mean_cols = [c for c in header[3:] if not c.endswith("-var")]
+    mean_cols = [c for c in header[3:] if not re.search(r"[.-]var$", c)]
     table = pd.read_csv(path, sep="\t", usecols=["contigName"] + mean_cols,
                         index_col="contigName")
-    samples = [c[: -len(".sorted.bam")] if c.endswith(".sorted.bam") else c
-               for c in mean_cols]
+    samples = [re.sub(r"\.sorted$", "", re.sub(r"\.bam$", "", c)) for c in mean_cols]
     return table, samples
 
 
