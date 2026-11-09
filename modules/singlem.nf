@@ -47,11 +47,21 @@ process SINGLEM {
     echo "SingleM metapackage: \$metapackage" >&2
     export SINGLEM_METAPACKAGE_PATH=\$metapackage
 
+    # Temporary files in the task folder, not in the node's /tmp: on some
+    # clusters /tmp is in memory, and SingleM writes large chunks there
+    mkdir -p tmp
+    export TMPDIR=\$PWD/tmp
+
+    # SingleM runs one DIAMOND per thread, each with its own memory: half as
+    # many threads as cores leaves about 4 GB per DIAMOND (with 16 GB and 8
+    # threads they ran out of memory on 12-16 Gbase samples)
     singlem pipe \\
         -1 ${r1} \\
         -2 ${r2} \\
         -p raw_profile.tsv \\
-        --threads ${task.cpus}
+        --threads ${Math.max(1, task.cpus.intdiv(2))}
+
+    rm -rf tmp
 
     # SingleM names the sample after the read file: use the samplesheet name
     awk -v s="${sample}" 'BEGIN { FS = OFS = "\\t" } NR == 1 { print; next } { \$1 = s; print }' \\
