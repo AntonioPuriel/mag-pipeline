@@ -4,6 +4,34 @@ Nextflow DSL2 pipeline for recovering metagenome-assembled genomes (MAGs) from p
 
 From raw paired-end reads to quality-assessed MAGs. Every step has been tested on an HPC cluster (SLURM) with conda environments and in CI with stub runs.
 
+## Biological question
+
+mag-pipeline grew out of my PhD thesis on microbial communities in coastal
+sediments contaminated with hydrocarbons and subjected to oxic-anoxic
+oscillations. In that work, the MAGs showed signs of differentiation into
+ecotypes (e.g., in Alcanivoracaceae): populations of the same species with
+different metabolic potential depending on the redox regime. But with a single,
+closed analysis workflow it was hard to resolve that variation with enough
+quality and reproducibility.
+
+The question that guides this pipeline is: **how do hydrocarbon-degrading
+microbial populations differentiate into ecotypes across environments and
+contamination conditions?**
+
+Answering it requires high-quality genomes that can be compared across
+samples. That is why the pipeline prioritizes:
+
+- Higher-quality MAGs: bin refinement, chimera checking (GUNC), MIMAG criteria.
+- Species-level dereplication (galah, 95 % ANI), which groups the genomes whose
+  variants are compared to identify ecotypes.
+- Functional annotation focused on hydrocarbon degradation pathways and the
+  oxidative stress response.
+- Full traceability of every run, so the same analysis can be applied to
+  different studies and environments.
+
+The case study (PRJNA1263040, the Marine Honour spill, Singapore) is the first
+application of this approach to a system other than the one in the thesis.
+
 ## Workflow
 
 | Step | Tool | Status |
