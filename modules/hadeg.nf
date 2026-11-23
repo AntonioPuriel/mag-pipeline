@@ -11,6 +11,7 @@ process HADEG {
 
     output:
     tuple val(id), val(binner), path("${id}_${binner}.hadeg.tsv"), emit: hits
+    tuple val("${task.process}"), val('diamond'), eval("diamond version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

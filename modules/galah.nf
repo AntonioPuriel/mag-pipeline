@@ -14,6 +14,7 @@ process GALAH {
     path "representatives",            emit: representatives
     path "dereplication_clusters.tsv", emit: clusters
     path "gunc_excluded.txt",          emit: gunc_excluded
+    tuple val("${task.process}"), val('galah'), eval("galah --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     def exclude = params.gunc_exclude ? 'true' : 'false'

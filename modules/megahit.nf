@@ -10,6 +10,7 @@ process MEGAHIT {
     output:
     tuple val(id), path("${id}.contigs.fa.gz"), emit: contigs
     path "${id}.megahit.log",                   emit: log
+    tuple val("${task.process}"), val('megahit'), eval("megahit --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     def r1_list = [r1].flatten().join(',')

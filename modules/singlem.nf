@@ -23,6 +23,7 @@ process SINGLEM {
 
     output:
     path "${sample}.singlem.tsv", emit: profile
+    tuple val("${task.process}"), val('singlem'), eval("singlem --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

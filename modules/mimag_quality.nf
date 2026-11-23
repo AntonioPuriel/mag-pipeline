@@ -14,6 +14,7 @@ process MIMAG_QUALITY {
 
     output:
     path "mimag_quality.tsv", emit: tsv
+    tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     // No stub block: the table is built from the stub outputs of the steps
     // before it, so stub runs test the real script

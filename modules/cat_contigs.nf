@@ -28,6 +28,7 @@ process CAT_CONTIGS {
     output:
     tuple val(id), path("${id}.CAT.named.txt"), emit: classification
     path "${id}.CAT.log",                        emit: log
+    tuple val("${task.process}"), val('cat'), eval("CAT_pack --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

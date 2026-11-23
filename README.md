@@ -90,7 +90,7 @@ flowchart TB
     P -. KOs .-> O
     MI -. MIMAG category .-> O
     HC -. hydrocarbon genes .-> O
-    O[("Output tables<br/>mag_quality · mimag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
+    O[("Output tables<br/>mag_quality · mimag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · manifest.json")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
@@ -265,7 +265,9 @@ results/
 │   ├── genes/ catalog/ abundance/ function/ taxonomy/
 │   └── profiles/   # KO, hydrocarbon marker and taxon x sample tables
 ├── 09_singlem/     # SingleM profile of every sample (with --singlem_db)
-└── run_info.txt    # pipeline version, command line, parameters and database dates
+├── run_info.txt    # pipeline version, command line, parameters and database dates
+├── manifest.json   # the same as JSON, plus the list of tables of the run (read by magreport)
+└── report/         # summary tables only, gzipped, with their own manifest: copy this folder to read with magreport
 ```
 
 ## MAG quality categories
@@ -399,6 +401,42 @@ Every run writes `run_info.txt` next to the results: pipeline and Nextflow
 versions, the exact command line, every parameter and the modification date of
 each reference database. eggNOG and GTDB releases are not versioned by name, so
 that date is what makes an annotation reproducible months later.
+
+`manifest.json` holds the same information in a form a program can read, and
+lists the summary tables the run produced, with paths relative to the
+manifest. [magreport](https://github.com/AntonioPuriel/magreport) reads it to
+know which tables exist and which pipeline version wrote them. Its format is
+described in [docs/manifest.md](docs/manifest.md).
+
+To work on a laptop, copy only `report/`: the summary tables, gzipped, without
+the per-contig tables (`depth.txt`, `contig2bin.tsv`), and with their own
+manifest. Then `magreport::read_pipeline("report")`.
+
+## Compatibility with magreport
+
+Which version of [magreport](https://github.com/AntonioPuriel/magreport) reads the output of each version of the pipeline:
+
+| mag-pipeline | New output read by magreport | magreport |
+|---|---|---|
+| < 1.4.0 | `mag_quality.tsv`, `bin_summary.tsv`, `mapping_summary.tsv`, depth and assembly tables | any |
+| 1.4.0 | `ko_per_mag.tsv`, `annotation_stats.tsv` (eggNOG) | any |
+| 1.4.0 | `mag_abundance.tsv` | ≥ 0.5.0 |
+| 1.7.0 | GUNC reports (`--gunc_db`) | ≥ 0.9.0 |
+| 1.8.0 | `mimag_quality.tsv` (`--mimag`) | ≥ 0.5.0 |
+| 1.9.0 | `hydrocarbon_per_mag.tsv` (CANT-HYD, HADEG) | ≥ 0.5.0 |
+| 2.0.0 | `bac120.tree` (`--mag_tree`) | ≥ 0.6.0 |
+| 2.0.0 | gene catalog profiles (`--workflow contigs` or `both`) and SingleM | ≥ 0.8.0 |
+| 2.1.0 | `manifest.json` (`schema_version` 1.0) and the `report/` folder | ≥ 0.9.0 |
+
+- A newer magreport always reads older runs: without `manifest.json` it finds
+  the tables by name, and it reads `run_info.txt` for the methods.
+- An older magreport ignores the tables it does not know. Before 0.9.0 it does
+  not read `manifest.json` nor the gzipped tables of `report/`: point it to the
+  whole results directory instead.
+- The manifest has its own version: magreport reads the `schema_version` it
+  knows and newer minor versions (with a warning), and refuses a newer major
+  version, which renames or removes tables. See
+  [docs/manifest.md](https://github.com/AntonioPuriel/mag-pipeline/blob/main/docs/manifest.md).
 
 ## Taxonomy
 

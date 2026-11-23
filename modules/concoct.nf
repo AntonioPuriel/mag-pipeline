@@ -10,6 +10,7 @@ process CONCOCT {
 
     output:
     tuple val(id), val('concoct'), path("${id}_concoct_bins"), emit: bins
+    tuple val("${task.process}"), val('concoct'), eval("concoct --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

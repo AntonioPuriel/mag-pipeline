@@ -32,6 +32,7 @@ process MAG_TREE {
     path "mag_tree/*.user_msa.fasta.gz", emit: msa,      optional: true
     path "mag_tree/*.filtered.tsv",      emit: filtered, optional: true
     path "mag_tree/mag_tree.log",        emit: log
+    tuple val("${task.process}"), val('gtdbtk'), eval("gtdbtk --version 2>&1 | grep -m1 -i version | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

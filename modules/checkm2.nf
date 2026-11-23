@@ -10,6 +10,7 @@ process CHECKM2 {
 
     output:
     tuple val(id), val(binner), path("${id}_${binner}.checkm2.tsv"), emit: report
+    tuple val("${task.process}"), val('checkm2'), eval("checkm2 --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

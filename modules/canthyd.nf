@@ -11,6 +11,7 @@ process CANTHYD {
 
     output:
     tuple val(id), val(binner), path("${id}_${binner}.canthyd.tsv"), emit: hits
+    tuple val("${task.process}"), val('hmmer'), eval("hmmsearch -h 2>&1 | grep -m1 HMMER | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

@@ -471,4 +471,17 @@ workflow {
         )
         SINGLEM_SUMMARY(SINGLEM.out.profile.collect())
     }
+
+    // ---- Versions of the tools ----
+    // Every module reports the version of its tools, as the tool itself gives
+    // it in the task's own environment, on the `versions` topic. One line per
+    // process and tool; workflow.onComplete puts them in manifest.json.
+    channel.topic('versions')
+        .map { proc, tool, version ->
+            def v = version.toString().trim()
+            "${proc}\t${tool}\t${v ?: 'unknown'}".toString()
+        }
+        .unique()
+        .collectFile(name: 'software_versions.tsv', storeDir: "${params.outdir}/pipeline_info",
+                     newLine: true, sort: true)
 }

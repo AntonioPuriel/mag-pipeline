@@ -19,6 +19,7 @@ process GENE_ABUNDANCE {
     path "gene_depth.tsv.gz",          emit: depth
     path "gene_tpm.tsv.gz",            emit: tpm
     path "gene_abundance_stats.tsv",   emit: stats
+    tuple val("${task.process}"), val('pandas'), eval("python3 -c 'import pandas; print(pandas.__version__)' 2>/dev/null || true"), topic: versions
 
     script:
     """

@@ -15,6 +15,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: nf-core/setup-nextflow@v2
+      # CONTIG_PROFILES has no stub: its script runs in the stub runs too
+      - name: Python packages of the contig scripts
+        run: pip install numpy pandas
       - name: Stub run (default settings)
         run: nextflow run . -profile test -stub-run
       - name: Stub run (per-sample assembly with DAS_Tool refinement)
@@ -29,11 +32,16 @@ jobs:
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --gunc_db assets/NO_FILE --gunc_exclude --gtdbtk_db assets/NO_FILE --mimag --mag_tree --outdir results_mimag
       - name: Stub run (hydrocarbon degradation genes with CANT-HYD and HADEG)
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --canthyd_db assets/NO_FILE --hadeg_db assets/NO_FILE --outdir results_hydrocarbons
-      - name: Stub run (contig branch: gene catalog, function, CAT taxonomy and SingleM, no binning)
+      - name: "Stub run (contig branch: gene catalog, function, CAT taxonomy and SingleM, no binning)"
         run: nextflow run . -profile test -stub-run --workflow contigs --eggnog_db assets/NO_FILE --canthyd_db assets/NO_FILE --hadeg_db assets/NO_FILE --cat_db assets/NO_FILE --singlem_db assets/NO_FILE --outdir results_contigs
       - name: Stub run (MAGs and contigs on the same co-assemblies)
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --workflow both --canthyd_db assets/NO_FILE --cat_db assets/NO_FILE --outdir results_both
-      - name: Unit test (gene depth averaged across assemblies, profiles)
+      - name: Manifest and report/ written at the end of a run
         run: |
-          pip install numpy pandas
-          bash tests/test_contig_scripts.sh
+          python3 -m json.tool results_both/manifest.json > /dev/null
+          python3 -m json.tool results_both/report/manifest.json > /dev/null
+          test -f results_both/report/run_info.txt
+      - name: Unit test (manifest rebuilt from the results of an older run)
+        run: bash tests/test_make_manifest.sh
+      - name: Unit test (gene depth averaged across assemblies, profiles)
+        run: bash tests/test_contig_scripts.sh

@@ -19,6 +19,7 @@ process GTDB_TK {
     tuple val(id), val(binner), path("${id}_${binner}.gtdbtk.tsv"), emit: summary
     path "gtdbtk_out/align/*.user_msa.fasta*", emit: msa,   optional: true
     path "gtdbtk_out/classify/*.tree",         emit: trees, optional: true
+    tuple val("${task.process}"), val('gtdbtk'), eval("gtdbtk --version 2>&1 | grep -m1 -i version | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

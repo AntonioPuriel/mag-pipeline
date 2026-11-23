@@ -10,6 +10,7 @@ process PRODIGAL {
     output:
     tuple val(id), val(binner), path("${id}_${binner}.faa"), emit: proteins
     path "${id}_${binner}.gene_counts.tsv",                  emit: counts
+    tuple val("${task.process}"), val('prodigal'), eval("prodigal -v 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

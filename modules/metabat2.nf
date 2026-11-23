@@ -9,6 +9,7 @@ process METABAT2 {
 
     output:
     tuple val(id), val('metabat2'), path("${id}_metabat2_bins"), emit: bins
+    tuple val("${task.process}"), val('metabat2'), eval("metabat2 --help 2>&1 | grep -oE 'version [^ ]+' | head -n1 | grep -oE '[0-9]+\\.[0-9.]+' || true"), topic: versions
 
     script:
     // MetaBAT2 does not accept contigs shorter than 1500 bp
