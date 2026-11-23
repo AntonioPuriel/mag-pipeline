@@ -10,6 +10,7 @@ process EGGNOG_MAPPER {
 
     output:
     tuple val(id), val(binner), path("${id}_${binner}.emapper.annotations"), emit: annotations
+    tuple val("${task.process}"), val('eggnog-mapper'), eval("emapper.py --version 2>&1 | grep -m1 emapper | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     def dbmem = params.eggnog_dbmem ? '--dbmem' : ''

@@ -21,6 +21,7 @@ process CONTIG_PROFILES {
     output:
     path "*.tsv",                      emit: tables
     path "catalog_annotation.tsv.gz",  emit: annotation
+    tuple val("${task.process}"), val('pandas'), eval("python3 -c 'import pandas; print(pandas.__version__)' 2>/dev/null || true"), topic: versions
 
     // No stub block: runs on the stub outputs of the steps before it
     script:

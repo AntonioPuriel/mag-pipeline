@@ -11,6 +11,7 @@ process TRNASCAN {
     output:
     tuple val(id), val(binner), path("${id}_${binner}.trna.tsv"), emit: summary
     path "trnascan_out",                                          emit: raw
+    tuple val("${task.process}"), val('trnascan-se'), eval("tRNAscan-SE -h 2>&1 | grep -m1 -i 'tRNAscan-SE [0-9]' | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

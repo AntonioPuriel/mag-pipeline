@@ -11,6 +11,7 @@ process FASTP {
     tuple val(sample), path("${sample}_R1.trimmed.fastq.gz"), path("${sample}_R2.trimmed.fastq.gz"), emit: reads
     path "${sample}.fastp.json", emit: json
     path "${sample}.fastp.html", emit: html
+    tuple val("${task.process}"), val('fastp'), eval("fastp --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

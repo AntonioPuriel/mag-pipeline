@@ -11,6 +11,7 @@ process BARRNAP {
     output:
     tuple val(id), val(binner), path("${id}_${binner}.rrna.tsv"), emit: summary
     path "barrnap_gff",                                           emit: gff
+    tuple val("${task.process}"), val('barrnap'), eval("barrnap --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

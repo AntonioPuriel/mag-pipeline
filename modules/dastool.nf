@@ -11,6 +11,7 @@ process DAS_TOOL {
     tuple val(id), val('dastool'), path("${id}_dastool_bins"), emit: bins
     path "${id}_DASTool_summary.tsv", optional: true,         emit: summary
     path "${id}_DASTool.log",                                 emit: log
+    tuple val("${task.process}"), val('das_tool'), eval("DAS_Tool --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

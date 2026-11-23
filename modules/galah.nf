@@ -14,6 +14,7 @@ process GALAH {
     path "representatives",            emit: representatives
     path "dereplication_clusters.tsv", emit: clusters
     path "gunc_excluded.txt",          emit: gunc_excluded
+    tuple val("${task.process}"), val('galah'), eval("galah --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     def exclude = params.gunc_exclude ? 'true' : 'false'
@@ -37,7 +38,7 @@ process GALAH {
                      g && p && \$p == "False" { print \$g }' gunc/*.gunc.tsv | sort -u > gunc_excluded.txt
         if [ -s gunc_excluded.txt ]; then
             echo "Left out of dereplication as chimeric (GUNC): \$(wc -l < gunc_excluded.txt) genomes" >&2
-            awk 'NR == FNR { bad[\$1]; next } { n = \$0; sub(/.*\\//, "", n); sub(/\\.fa\$/, "", n) } !(n in bad)' \\
+            awk 'NR == FNR { bad[\$1]; next } { n = \$0; sub(/.*\\//, "", n); sub(/\.fa\$/, "", n) } !(n in bad)' \\
                 gunc_excluded.txt genomes.txt > genomes_kept.txt
             mv genomes_kept.txt genomes.txt
         fi
@@ -70,7 +71,7 @@ process GALAH {
 
     # From paths to bin names: representative<TAB>member
     awk -F'\\t' -v OFS='\\t' '{
-        for (i = 1; i <= 2; i++) { sub(/.*\\//, "", \$i); sub(/\\.fa\$/, "", \$i) }
+        for (i = 1; i <= 2; i++) { sub(/.*\\//, "", \$i); sub(/\.fa\$/, "", \$i) }
         print
     }' galah_clusters.tsv >> dereplication_clusters.tsv
     """

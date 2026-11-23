@@ -25,6 +25,9 @@ process MAP_DEPTH {
     tuple val(id), val(sample), path("${id}__${sample}.depth.txt"),  emit: depth
     tuple val(id), val(sample), path("${id}__${sample}.concoct.tsv"), emit: concoct_cov, optional: true
     path "${id}__${sample}.bowtie2.log",                              emit: log
+    tuple val("${task.process}"), val('bowtie2'), eval("bowtie2 --version 2>&1 | head -n1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
+    tuple val("${task.process}"), val('samtools'), eval("samtools --version 2>&1 | head -n1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
+    tuple val("${task.process}"), val('metabat2'), eval("metabat2 --help 2>&1 | grep -oE 'version [^ ]+' | head -n1 | grep -oE '[0-9]+\\.[0-9.]+' || true"), topic: versions
 
     script:
     """
@@ -167,6 +170,7 @@ process CONCOCT_CUTUP {
 
     output:
     tuple val(id), path("${id}_contigs_10K.fa"), path("${id}_contigs_10K.bed"), emit: cutup
+    tuple val("${task.process}"), val('concoct'), eval("concoct --version 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

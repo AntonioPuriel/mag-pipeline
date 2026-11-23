@@ -11,6 +11,7 @@ process GUNC {
 
     output:
     tuple val(id), val(binner), path("${id}_${binner}.gunc.tsv"), emit: report
+    tuple val("${task.process}"), val('gunc'), eval("gunc --version 2>/dev/null | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

@@ -24,6 +24,7 @@ process PRODIGAL_CONTIGS {
     output:
     tuple val(id), path("${id}.genes.faa.gz"), path("${id}.genes.fna.gz"), emit: genes
     path "${id}.genes.stats.tsv",                                           emit: stats
+    tuple val("${task.process}"), val('prodigal'), eval("prodigal -v 2>&1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

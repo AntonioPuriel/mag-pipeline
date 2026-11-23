@@ -8,6 +8,7 @@ process BOWTIE2_BUILD {
 
     output:
     tuple val(id), path("bowtie2_index"), emit: index
+    tuple val("${task.process}"), val('bowtie2'), eval("bowtie2 --version 2>&1 | head -n1 | grep -oE '[0-9]+(\\.[0-9]+)+[0-9a-z.-]*' | head -n1 || true"), topic: versions
 
     script:
     """

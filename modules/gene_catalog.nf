@@ -27,6 +27,7 @@ process GENE_CATALOG {
     path "gene_catalog.faa.gz",          emit: proteins
     path "gene_catalog.clusters.tsv.gz", emit: clusters
     path "gene_catalog.stats.tsv",       emit: stats
+    tuple val("${task.process}"), val('mmseqs2'), eval("mmseqs version 2>&1 | head -n1 || true"), topic: versions
 
     script:
     // leave a margin below the task memory for what MMseqs2 does not count
