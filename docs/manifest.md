@@ -54,6 +54,23 @@ sample.
 
 Any of these may also end in `.gz`.
 
+## The report/ folder
+
+Next to the manifest, every run writes `report/`: a copy of the summary tables
+small enough to copy to a laptop and read with `magreport::read_pipeline()`.
+
+- Same layout as the results (`report/05_quality/mag_quality.tsv.gz`, ...).
+- `.tsv` and `.txt` files are gzipped; trees are copied as they are.
+- The tables with one row per contig, `depth` and `contig2bin`, are left out:
+  they reach several GB in large runs and the report does not use them.
+- `report/manifest.json` is the manifest of the run with `tables` pointing to
+  the copies, plus `bundle.excluded`, the tables left out.
+- `report/run_info.txt` is a copy of `run_info.txt`.
+
+`report/` is rebuilt at the end of every run, also with `-resume`. In the
+Marine Honour case study (42 samples) the summary tables take about 100 MB
+uncompressed, against 2.6 GB with `depth` and `contig2bin`.
+
 ## Versions of the format
 
 - **Minor** (`1.0` → `1.1`): a table or a column is added. Readers written for

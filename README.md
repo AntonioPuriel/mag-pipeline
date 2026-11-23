@@ -266,7 +266,8 @@ results/
 │   └── profiles/   # KO, hydrocarbon marker and taxon x sample tables
 ├── 09_singlem/     # SingleM profile of every sample (with --singlem_db)
 ├── run_info.txt    # pipeline version, command line, parameters and database dates
-└── manifest.json   # the same as JSON, plus the list of tables of the run (read by magreport)
+├── manifest.json   # the same as JSON, plus the list of tables of the run (read by magreport)
+└── report/         # summary tables only, gzipped, with their own manifest: copy this folder to read with magreport
 ```
 
 ## MAG quality categories
@@ -406,6 +407,10 @@ lists the summary tables the run produced, with paths relative to the
 manifest. [magreport](https://github.com/AntonioPuriel/magreport) reads it to
 know which tables exist and which pipeline version wrote them. Its format is
 described in [docs/manifest.md](docs/manifest.md).
+
+To work on a laptop, copy only `report/`: the summary tables, gzipped, without
+the per-contig tables (`depth.txt`, `contig2bin.tsv`), and with their own
+manifest. Then `magreport::read_pipeline("report")`.
 
 ## Taxonomy
 
