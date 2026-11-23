@@ -15,6 +15,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: nf-core/setup-nextflow@v2
+      # CONTIG_PROFILES has no stub: its script runs in the stub runs too
+      - name: Python packages of the contig scripts
+        run: pip install numpy pandas
       - name: Stub run (default settings)
         run: nextflow run . -profile test -stub-run
       - name: Stub run (per-sample assembly with DAS_Tool refinement)
@@ -41,6 +44,4 @@ jobs:
       - name: Unit test (manifest rebuilt from the results of an older run)
         run: bash tests/test_make_manifest.sh
       - name: Unit test (gene depth averaged across assemblies, profiles)
-        run: |
-          pip install numpy pandas
-          bash tests/test_contig_scripts.sh
+        run: bash tests/test_contig_scripts.sh
