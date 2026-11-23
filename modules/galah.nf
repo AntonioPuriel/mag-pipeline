@@ -38,7 +38,7 @@ process GALAH {
                      g && p && \$p == "False" { print \$g }' gunc/*.gunc.tsv | sort -u > gunc_excluded.txt
         if [ -s gunc_excluded.txt ]; then
             echo "Left out of dereplication as chimeric (GUNC): \$(wc -l < gunc_excluded.txt) genomes" >&2
-            awk 'NR == FNR { bad[\$1]; next } { n = \$0; sub(/.*\\//, "", n); sub(/\.fa\$/, "", n) } !(n in bad)' \\
+            awk 'NR == FNR { bad[\$1]; next } { n = \$0; sub(/.*\\//, "", n); sub(/\\.fa\$/, "", n) } !(n in bad)' \\
                 gunc_excluded.txt genomes.txt > genomes_kept.txt
             mv genomes_kept.txt genomes.txt
         fi
