@@ -41,6 +41,9 @@ sample.
 | `dereplication` | `05_quality/dereplication/dereplication_clusters.tsv` |
 | `gtdbtk` | `06_taxonomy/<id>_<set>.gtdbtk.tsv` |
 | `mag_tree` | `06_taxonomy/mag_tree/*.tree` |
+| `mag_tree_msa` | `06_taxonomy/mag_tree/*.user_msa.fasta.gz` (alignment of the tree; schema 1.1) |
+| `gtdbtk_msa` | `06_taxonomy/gtdbtk/<id>_<set>/align/*.user_msa.fasta.gz` (schema 1.1) |
+| `gtdbtk_trees` | `06_taxonomy/gtdbtk/<id>_<set>/classify/*.tree` (GTDB-Tk placement trees; schema 1.1) |
 | `ko_per_mag` | `07_function/ko_per_mag.tsv` |
 | `annotation_stats` | `07_function/annotation_stats.tsv` |
 | `hydrocarbon_per_mag` | `07_function/hydrocarbon_per_mag.tsv` |
@@ -65,6 +68,11 @@ small enough to copy to a laptop and read with `magreport::read_pipeline()`.
 - `.tsv` and `.txt` files are gzipped; trees are copied as they are.
 - The tables with one row per contig, `depth` and `contig2bin`, are left out:
   they reach several GB in large runs and the report does not use them.
+- The GTDB-Tk alignments and placement trees (`gtdbtk_msa`, `gtdbtk_trees`)
+  are left out too: they hold thousands of reference genomes (12 MB in Marine
+  Honour) and stay listed in the manifest of the results. The alignment of
+  `--mag_tree` (`mag_tree_msa`, 0.5 MB) goes in, to rebuild the tree of the
+  MAGs with another method.
 - `report/manifest.json` is the manifest of the run with `tables` pointing to
   the copies, plus `bundle.excluded`, the tables left out.
 - `report/run_info.txt` is a copy of `run_info.txt`.
@@ -101,13 +109,14 @@ script and `workflow.onComplete` list the same tables.
 | schema_version | mag-pipeline | magreport |
 |---|---|---|
 | (none: `run_info.txt` only) | ≤ 2.0.0 | all (finds tables by name) |
-| 1.0 | ≥ 2.1.0 | ≥ 0.9.0 |
+| 1.0 | 2.1.0 | ≥ 0.9.0 |
+| 1.1 | ≥ 2.2.0 | ≥ 0.9.1 (0.9.0 reads it with a warning) |
 
 ## Example
 
 ```json
 {
-    "schema_version": "1.0",
+    "schema_version": "1.1",
     "pipeline": {
         "name": "AntonioPuriel/mag-pipeline",
         "version": "2.1.0",

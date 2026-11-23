@@ -41,6 +41,20 @@ jobs:
           python3 -m json.tool results_both/manifest.json > /dev/null
           python3 -m json.tool results_both/report/manifest.json > /dev/null
           test -f results_both/report/run_info.txt
+      - name: GTDB-Tk alignments listed in the manifest, only that of --mag_tree in report/
+        run: |
+          python3 - <<'EOF'
+          import json
+          m = json.load(open("results_mimag/manifest.json"))
+          r = json.load(open("results_mimag/report/manifest.json"))
+          for name in ("gtdbtk_msa", "gtdbtk_trees", "mag_tree_msa"):
+              assert name in m["tables"], name
+          assert all("/align/" in f for f in m["tables"]["gtdbtk_msa"]), m["tables"]["gtdbtk_msa"]
+          assert "mag_tree_msa" in r["tables"]
+          assert "gtdbtk_msa" not in r["tables"] and "gtdbtk_trees" not in r["tables"]
+          assert {"gtdbtk_msa", "gtdbtk_trees"} <= set(r["bundle"]["excluded"]), r["bundle"]
+          print("ok:", m["schema_version"], sorted(m["tables"]))
+          EOF
       - name: Unit test (manifest rebuilt from the results of an older run)
         run: bash tests/test_make_manifest.sh
       - name: Unit test (gene depth averaged across assemblies, profiles)
