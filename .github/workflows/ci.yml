@@ -33,6 +33,13 @@ jobs:
         run: nextflow run . -profile test -stub-run --workflow contigs --eggnog_db assets/NO_FILE --canthyd_db assets/NO_FILE --hadeg_db assets/NO_FILE --cat_db assets/NO_FILE --singlem_db assets/NO_FILE --outdir results_contigs
       - name: Stub run (MAGs and contigs on the same co-assemblies)
         run: nextflow run . -profile test -stub-run --input assets/samplesheet_test_groups.csv --assembly_mode group --map_all_samples --refine --dereplicate --workflow both --canthyd_db assets/NO_FILE --cat_db assets/NO_FILE --outdir results_both
+      - name: Manifest and report/ written at the end of a run
+        run: |
+          python3 -m json.tool results_both/manifest.json > /dev/null
+          python3 -m json.tool results_both/report/manifest.json > /dev/null
+          test -f results_both/report/run_info.txt
+      - name: Unit test (manifest rebuilt from the results of an older run)
+        run: bash tests/test_make_manifest.sh
       - name: Unit test (gene depth averaged across assemblies, profiles)
         run: |
           pip install numpy pandas

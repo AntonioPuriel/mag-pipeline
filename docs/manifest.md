@@ -15,6 +15,8 @@ does not have to guess file names or folder layouts.
 | `run` | `name`, `session_id`, `started`, `completed`, `duration`, `success`, `exit_status`, `profile`, `container_engine`, `command_line` |
 | `databases` | One entry per database given (`checkm2`, `gtdbtk`, `eggnog`, `canthyd`, `hadeg`, `cat`, `singlem`, `gunc`): `path` and `modified` (date of last modification, `null` if not readable from the head node) |
 | `params` | Every parameter of the run |
+| `software` | Version of each tool, as reported by the tool itself (empty when the manifest is rebuilt from an older run) |
+| `source` | Only in manifests rebuilt by `scripts/make_manifest.py`: `written_by`, `date` and `from` (the `run_info.txt` it was built from) |
 | `tables` | Table name → list of paths, relative to `manifest.json` |
 
 Only the tables that exist are listed: which ones depend on `--workflow`,
@@ -70,6 +72,24 @@ small enough to copy to a laptop and read with `magreport::read_pipeline()`.
 `report/` is rebuilt at the end of every run, also with `-resume`. In the
 Marine Honour case study (42 samples) the summary tables take about 100 MB
 uncompressed, against 2.6 GB with `depth` and `contig2bin`.
+
+## Results of older runs
+
+Runs of mag-pipeline 2.0.0 or earlier have no manifest, and their cache may be
+gone, so `-resume` with a newer version cannot add it. `scripts/make_manifest.py`
+builds `manifest.json` and `report/` from the results directory alone, taking
+the pipeline, run, databases and parameters from `run_info.txt`:
+
+```bash
+python3 scripts/make_manifest.py path/to/results
+```
+
+It needs only Python 3.6 or later. It does not overwrite a manifest written by
+the pipeline (use `--force` to replace it), and `--no-report` skips
+`report/`. Such a manifest has one more field, `source`, saying it was rebuilt
+and from which file. The versions of the tools cannot be recovered after the
+run, so `software` is empty. `tests/test_make_manifest.sh` checks that the
+script and `workflow.onComplete` list the same tables.
 
 ## Versions of the format
 
