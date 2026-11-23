@@ -90,7 +90,7 @@ flowchart TB
     P -. KOs .-> O
     MI -. MIMAG category .-> O
     HC -. hydrocarbon genes .-> O
-    O[("Output tables<br/>mag_quality · mimag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · run_info")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
+    O[("Output tables<br/>mag_quality · mimag_quality · mag_abundance<br/>GTDB-Tk summary · ko_per_mag · manifest.json")] --> MR["magreport (R)<br/>quality, abundance, taxonomy, pathways<br/>+ HTML report"]
 
     classDef opt stroke-dasharray: 5 5
     classDef planned fill:#f2f2f2,stroke:#999999,color:#666666,stroke-dasharray: 2 2
@@ -265,7 +265,8 @@ results/
 │   ├── genes/ catalog/ abundance/ function/ taxonomy/
 │   └── profiles/   # KO, hydrocarbon marker and taxon x sample tables
 ├── 09_singlem/     # SingleM profile of every sample (with --singlem_db)
-└── run_info.txt    # pipeline version, command line, parameters and database dates
+├── run_info.txt    # pipeline version, command line, parameters and database dates
+└── manifest.json   # the same as JSON, plus the list of tables of the run (read by magreport)
 ```
 
 ## MAG quality categories
@@ -399,6 +400,12 @@ Every run writes `run_info.txt` next to the results: pipeline and Nextflow
 versions, the exact command line, every parameter and the modification date of
 each reference database. eggNOG and GTDB releases are not versioned by name, so
 that date is what makes an annotation reproducible months later.
+
+`manifest.json` holds the same information in a form a program can read, and
+lists the summary tables the run produced, with paths relative to the
+manifest. [magreport](https://github.com/AntonioPuriel/magreport) reads it to
+know which tables exist and which pipeline version wrote them. Its format is
+described in [docs/manifest.md](docs/manifest.md).
 
 ## Taxonomy
 
