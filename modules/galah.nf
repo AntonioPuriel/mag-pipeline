@@ -71,7 +71,7 @@ process GALAH {
 
     # From paths to bin names: representative<TAB>member
     awk -F'\\t' -v OFS='\\t' '{
-        for (i = 1; i <= 2; i++) { sub(/.*\\//, "", \$i); sub(/\.fa\$/, "", \$i) }
+        for (i = 1; i <= 2; i++) { sub(/.*\\//, "", \$i); sub(/\\.fa\$/, "", \$i) }
         print
     }' galah_clusters.tsv >> dereplication_clusters.tsv
     """
