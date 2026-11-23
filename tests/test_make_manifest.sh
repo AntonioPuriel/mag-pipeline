@@ -17,13 +17,32 @@ config = open(sys.argv[1]).read()
 block = config[config.index("def known = ["):config.index("def tables = [:]")]
 groovy = re.findall(r"(\w+)\s*:\s*\['([^']+)',\s*/([^/]+)/\]", block)
 script = open(sys.argv[2]).read()
-python = re.findall(r'\("(\w+)",\s*"([^"]+)",\s*r"([^"]+)"\)', script)
+python = re.findall(r'\("(\w+)",\s*"([^"]+)",\s*r"([^"]+)"\)', script[:script.index("NESTED = [")])
 assert groovy, "no tables found in nextflow.config"
 assert groovy == python, "nextflow.config and make_manifest.py list different tables:\n{}\n{}".format(groovy, python)
-print("tables in sync:", len(groovy))
+
+# Tables in subfolders: Groovy single-quoted strings, where \\ is one backslash
+nested_block = config[config.index("def nested = ["):config.index("def tables = [:]")]
+groovy_nested = [(n, f, p.replace("\\\\", "\\"))
+                 for n, f, p in re.findall(r"(\w+)\s*:\s*\['([^']+)',\s*'([^']+)'\]", nested_block)]
+nested_script = script[script.index("NESTED = ["):]
+python_nested = re.findall(r'\("(\w+)",\s*"([^"]+)",\s*r"([^"]+)"\)', nested_script[:nested_script.index("]\n")])
+assert groovy_nested, "no nested tables found in nextflow.config"
+assert groovy_nested == python_nested, "nested tables differ:\n{}\n{}".format(groovy_nested, python_nested)
+
+excluded_groovy = re.search(r"def excluded = \[([^\]]*)\]", config).group(1)
+excluded_python = re.search(r"EXCLUDED_FROM_REPORT = \[([^\]]*)\]", script).group(1)
+assert re.findall(r"'(\w+)'", excluded_groovy) == re.findall(r'"(\w+)"', excluded_python), \
+    "tables left out of report/ differ"
+
+schema_groovy = re.search(r"schema_version: '([^']+)'", config).group(1)
+schema_python = re.search(r'SCHEMA_VERSION = "([^"]+)"', script).group(1)
+assert schema_groovy == schema_python, (schema_groovy, schema_python)
+print("tables in sync:", len(groovy), "+", len(groovy_nested), "nested; schema", schema_python)
 EOF
 
 mkdir -p "$res"/{02_assembly,03_mapping,04_binning,05_quality/gunc,06_taxonomy/mag_tree,09_singlem/profiles}
+mkdir -p "$res"/06_taxonomy/gtdbtk/T0_dastool/{align,classify}
 printf "stage\tn_contigs\nfiltered\t10\n" > "$res/02_assembly/T0.contigs.stats.tsv"
 printf "contigName\tcontigLen\n" > "$res/03_mapping/T0.depth.txt"
 printf "sample\tread_pairs\ns1\t100\n" > "$res/03_mapping/mapping_summary.tsv"
@@ -33,6 +52,10 @@ printf "bin\tcompleteness\n" > "$res/05_quality/mag_quality.tsv"
 printf "genome\tpass.GUNC\n" > "$res/05_quality/gunc/T0_dastool.gunc.tsv"
 printf "genome\tpass.GUNC\n" > "$res/05_quality/gunc/T1_dastool.gunc.tsv"
 printf "(a,b);\n" > "$res/06_taxonomy/mag_tree/bac120.tree"
+printf ">a\nMK\n" | gzip > "$res/06_taxonomy/mag_tree/bac120.user_msa.fasta.gz"
+printf ">a\nMK\n" | gzip > "$res/06_taxonomy/gtdbtk/T0_dastool/align/gtdbtk.bac120.user_msa.fasta.gz"
+printf "(a,b);\n" > "$res/06_taxonomy/gtdbtk/T0_dastool/classify/gtdbtk.bac120.classify.tree.1.tree"
+printf "not a table\n" > "$res/06_taxonomy/gtdbtk/T0_dastool/align/notes.txt"
 printf "taxonomy\n" > "$res/09_singlem/profiles/s1.singlem.tsv"
 printf "not a table\n" > "$res/05_quality/notes.txt"
 
@@ -80,7 +103,7 @@ python3 - "$res" <<'EOF'
 import gzip, json, os, sys
 res = sys.argv[1]
 m = json.load(open(os.path.join(res, "manifest.json")))
-assert m["schema_version"] == "1.0"
+assert m["schema_version"] == "1.1"
 assert m["source"]["written_by"] == "scripts/make_manifest.py"
 assert m["pipeline"] == {"name": "AntonioPuriel/mag-pipeline", "version": "2.0.0",
                          "revision": None, "commit": None, "nextflow": "26.04.6"}, m["pipeline"]
@@ -100,13 +123,19 @@ expected = {
     "mag_quality": ["05_quality/mag_quality.tsv"],
     "gunc": ["05_quality/gunc/T0_dastool.gunc.tsv", "05_quality/gunc/T1_dastool.gunc.tsv"],
     "mag_tree": ["06_taxonomy/mag_tree/bac120.tree"],
+    "mag_tree_msa": ["06_taxonomy/mag_tree/bac120.user_msa.fasta.gz"],
+    "gtdbtk_msa": ["06_taxonomy/gtdbtk/T0_dastool/align/gtdbtk.bac120.user_msa.fasta.gz"],
+    "gtdbtk_trees": ["06_taxonomy/gtdbtk/T0_dastool/classify/gtdbtk.bac120.classify.tree.1.tree"],
     "singlem_per_sample": ["09_singlem/profiles/s1.singlem.tsv"],
 }
 assert m["tables"] == expected, m["tables"]
 
 r = json.load(open(os.path.join(res, "report", "manifest.json")))
-assert r["bundle"] == {"excluded": ["depth", "contig2bin"]}
-assert "depth" not in r["tables"] and "contig2bin" not in r["tables"]
+assert r["bundle"] == {"excluded": ["depth", "contig2bin", "gtdbtk_msa", "gtdbtk_trees"]}, r["bundle"]
+for name in ("depth", "contig2bin", "gtdbtk_msa", "gtdbtk_trees"):
+    assert name not in r["tables"], name
+# The alignment of --mag_tree goes in report/, already gzipped
+assert r["tables"]["mag_tree_msa"] == ["06_taxonomy/mag_tree/bac120.user_msa.fasta.gz"]
 assert r["tables"]["mag_quality"] == ["05_quality/mag_quality.tsv.gz"]
 assert r["tables"]["mag_abundance"] == ["04_binning/mag_abundance.tsv.gz"]  # already gzipped
 assert r["tables"]["mag_tree"] == ["06_taxonomy/mag_tree/bac120.tree"]      # trees stay as they are

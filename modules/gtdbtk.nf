@@ -55,5 +55,8 @@ process GTDB_TK {
     stub:
     """
     printf "user_genome\\tclassification\\tclosest_genome_ani\\n${id}.${binner}.1\\td__Bacteria;p__Pseudomonadota;c__Gammaproteobacteria;o__Enterobacterales;f__Enterobacteriaceae;g__Escherichia;s__Escherichia coli\\t98.5\\n" > ${id}_${binner}.gtdbtk.tsv
+    mkdir -p gtdbtk_out/align gtdbtk_out/classify
+    printf ">${id}.${binner}.1\\nMK\\n" | gzip > gtdbtk_out/align/gtdbtk.bac120.user_msa.fasta.gz
+    printf "(${id}.${binner}.1:0.1,ref:0.2);\\n" > gtdbtk_out/classify/gtdbtk.bac120.classify.tree.1.tree
     """
 }

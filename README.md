@@ -427,6 +427,7 @@ Which version of [magreport](https://github.com/AntonioPuriel/magreport) reads t
 | 2.0.0 | `bac120.tree` (`--mag_tree`) | ≥ 0.6.0 |
 | 2.0.0 | gene catalog profiles (`--workflow contigs` or `both`) and SingleM | ≥ 0.8.0 |
 | 2.1.0 | `manifest.json` (`schema_version` 1.0) and the `report/` folder | ≥ 0.9.0 |
+| 2.2.0 | alignments and trees of GTDB-Tk and `--mag_tree` listed in the manifest (`schema_version` 1.1); the alignment of `--mag_tree` in `report/` | ≥ 0.9.1 |
 
 - A newer magreport always reads older runs: without `manifest.json` it finds
   the tables by name, and it reads `run_info.txt` for the methods.

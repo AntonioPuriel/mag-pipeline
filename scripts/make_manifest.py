@@ -26,7 +26,7 @@ import re
 import shutil
 import sys
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 # table name -> (folder under the results, file name pattern). Keep in sync
 # with `known` in workflow.onComplete (nextflow.config):
@@ -58,10 +58,19 @@ TABLES = [
     ("hadeg_per_sample",     "08_contigs/profiles",      r"hadeg_per_sample\.tsv(\.gz)?"),
     ("singlem",              "09_singlem",               r"singlem_profiles_with_extras\.tsv(\.gz)?"),
     ("singlem_per_sample",   "09_singlem/profiles",      r".+\.singlem\.tsv(\.gz)?"),
+    ("mag_tree_msa",         "06_taxonomy/mag_tree",     r".+\.user_msa\.fasta(\.gz)?"),
 ]
 
-# Left out of report/: one row per contig, GB in large runs
-EXCLUDED_FROM_REPORT = ["depth", "contig2bin"]
+# table name -> (folder under the results, pattern of the path below it):
+# files in subfolders. Keep in sync with `nested` in workflow.onComplete.
+NESTED = [
+    ("gtdbtk_msa",           "06_taxonomy/gtdbtk",       r"[^/]+/align/[^/]+\.user_msa\.fasta(\.gz)?"),
+    ("gtdbtk_trees",         "06_taxonomy/gtdbtk",       r"[^/]+/classify/[^/]+\.tree"),
+]
+
+# Left out of report/: one row per contig (GB in large runs), and the GTDB-Tk
+# alignments and placement trees (thousands of reference genomes)
+EXCLUDED_FROM_REPORT = ["depth", "contig2bin", "gtdbtk_msa", "gtdbtk_trees"]
 
 # Labels of run_info.txt -> keys of `databases` in the manifest
 DATABASE_KEYS = {
@@ -83,6 +92,16 @@ def find_tables(outdir):
         )
         if hits:
             tables[name] = hits
+    for name, folder, pattern in NESTED:
+        directory = os.path.join(outdir, folder)
+        hits = []
+        for root, _, files in os.walk(directory):
+            for f in files:
+                rel = os.path.relpath(os.path.join(root, f), directory).replace(os.sep, "/")
+                if re.fullmatch(pattern, rel):
+                    hits.append("{}/{}".format(folder, rel))
+        if hits:
+            tables[name] = sorted(hits)
     return tables
 
 
